@@ -15,6 +15,7 @@ import {
   EventCategory,
   SNSPost,
   RelationshipStage,
+  DiaryEntry,
 } from './types';
 import {
   initialStats,
@@ -45,6 +46,8 @@ import { WardrobeModal } from './components/modals/WardrobeModal';
 import { GradesModal } from './components/modals/GradesModal';
 import { FacilitiesModal } from './components/modals/FacilitiesModal';
 import { TimeManagementModal } from './components/modals/TimeManagementModal';
+import { DiaryModal } from './components/modals/DiaryModal';
+import { DestinyCardModal } from './components/modals/DestinyCardModal';
 import { SaveLoadModal } from './components/modals/SaveLoadModal';
 import { EventModal } from './components/modals/EventModal';
 import { ChatModal } from './components/modals/ChatModal';
@@ -65,10 +68,17 @@ import {
   ChoiceResultModal,
   ChoiceResultData,
 } from './components/modals/ChoiceResultModal';
+import { CharacterCreationModal } from './components/modals/CharacterCreationModal';
 import { MapActionItem, MapLocationInfo } from './data/mapData';
 
 export default function App() {
   const [stats, setStats] = useState<GameStats>(initialStats);
+  const [protagonistName, setProtagonistName] = useState<string>(() => {
+    return localStorage.getItem('seoul_heroine_name') || '李秀妍';
+  });
+  const [showCharacterCreation, setShowCharacterCreation] = useState<boolean>(() => {
+    return !localStorage.getItem('seoul_heroine_created');
+  });
   // 2025-2027 3-Year Academic System (Grade 1-3, Week 1-36 per year, Day 0-6 per week = 756 Days!)
   const [gradeYear, setGradeYear] = useState<number>(1);
   const [weekInYear, setWeekInYear] = useState<number>(1);
@@ -98,6 +108,52 @@ export default function App() {
   ]);
   const [unlockedEndingIds, setUnlockedEndingIds] = useState<string[]>([]);
   const [chatHistories, setChatHistories] = useState<Record<string, ChatMessage[]>>({});
+
+  const [diaryEntries, setDiaryEntries] = useState<DiaryEntry[]>(() => {
+    const saved = localStorage.getItem('seoul_heroine_diary');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.warn('Failed to parse saved diary entries');
+      }
+    }
+    return [
+      {
+        id: 'diary_init_1',
+        dateStr: '高一 第1周 周一',
+        title: '樱花开的初春，首尔女高开学日🌸',
+        content: '今天第一天踏进首尔女高1-1班，同桌朴敏英人超好，还分给我她自己烘焙的小蛋挞！下课时在走廊遇到了风纪委员韩素拉，眼神好高冷，但我一定要和她成为好朋友！',
+        mood: '期待',
+        sticker: '🌸',
+        weather: '🌸 樱花飘落',
+        createdAt: new Date().toISOString(),
+      },
+    ];
+  });
+
+  const handleSaveDiaryEntry = (entry: Omit<DiaryEntry, 'id' | 'createdAt'>) => {
+    const newEntry: DiaryEntry = {
+      ...entry,
+      id: `diary_${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+    setDiaryEntries((prev) => {
+      const updated = [newEntry, ...prev];
+      localStorage.setItem('seoul_heroine_diary', JSON.stringify(updated));
+      return updated;
+    });
+    showNotification('✍️ 成功将日志存入秘密青春手帐！');
+  };
+
+  const handleDeleteDiaryEntry = (id: string) => {
+    setDiaryEntries((prev) => {
+      const updated = prev.filter((d) => d.id !== id);
+      localStorage.setItem('seoul_heroine_diary', JSON.stringify(updated));
+      return updated;
+    });
+    showNotification('🗑️ 已删除手帐日记条目');
+  };
 
   const [selectedNpcId, setSelectedNpcId] = useState<string>(initialNPCs[0].id);
   const [aiConfig, setAiConfig] = useState<AIConfig>(defaultAIConfig);
@@ -918,6 +974,7 @@ export default function App() {
         aiConfig={aiConfig}
         unlockedEndingsCount={unlockedEndingIds.length}
         protagonistAvatarUrl={protagonistAvatarUrl}
+        protagonistName={protagonistName}
         onOpenAISettings={() => setActiveModal('aiSettings')}
         onOpenWardrobe={() => setActiveModal('wardrobe')}
         onOpenSNS={() => setActiveModal('snsPhone')}
@@ -928,6 +985,7 @@ export default function App() {
           setPortraitWorkshopNpcId(undefined);
           setActiveModal('portraitWorkshop');
         }}
+        onOpenCharacterCreation={() => setShowCharacterCreation(true)}
       />
 
       {/* Main Viewport: Left Vertical Sidebar (with Bond Characters Tab) + Center Korean High School Hallway */}
@@ -994,8 +1052,30 @@ export default function App() {
             setActiveModal('portraitWorkshop');
           }}
           onOpenRelationships={() => setActiveModal('relationships')}
+          onOpenDestinyCard={() => setActiveModal('destinyCard')}
         />
       </div>
+
+      {/* 0. Initial Character Creation Modal (Enrollment) */}
+      {showCharacterCreation && (
+        <CharacterCreationModal
+          onConfirm={(characterData) => {
+            setProtagonistName(characterData.name);
+            localStorage.setItem('seoul_heroine_name', characterData.name);
+            localStorage.setItem('seoul_heroine_created', 'true');
+            updateStats({
+              ...characterData.stats,
+              specialIdentity: characterData.backgroundName,
+            });
+            addGlobalMemory(
+              `在首尔女子高中完成了新生入学建档，名字：【${characterData.name}】，家世：【${characterData.backgroundName}】，MBTI：${characterData.mbti}`,
+              'life'
+            );
+            showNotification(`✨ 角色【${characterData.name}】入学建档成功！身份背景：${characterData.backgroundName}`);
+            setShowCharacterCreation(false);
+          }}
+        />
+      )}
 
       {/* 1. Weekly Action Turn-Based Scheduler Modal */}
       {activeModal === 'weeklyTurn' && (
@@ -1178,26 +1258,14 @@ export default function App() {
         />
       )}
 
-      {/* 9. Memory Book & Time Management Modal */}
-      {activeModal === 'timeManagement' && (
-        <TimeManagementModal
+      {/* 9. Memory Book & Secret Diary Modal */}
+      {(activeModal === 'timeManagement' || activeModal === 'diary') && (
+        <DiaryModal
           onClose={() => setActiveModal(null)}
-          currentDay={currentDayCount}
-          clockMinutes={clockMinutes}
-          weather={weekInfo.weather}
-          stats={stats}
-          memories={memories}
-          onAdvanceMinutes={(_mins, label) => {
-            handleAdvanceOneDay();
-            if (label) showNotification(label);
-          }}
-          onJumpToClock={(_targetMins, label) => {
-            if (label) showNotification(label);
-          }}
-          onRestAndSleep={() => {
-            applyDeltaStats({ stamina: 50, mood: 10, darkIndex: -8 });
-            showNotification('美美睡了一觉，体力恢复 +50，心情 +10！');
-          }}
+          currentDateStr={`高${gradeYear} 第${weekInYear}周 周${WEEKDAYS[dayInWeek] || '一'}`}
+          diaryEntries={diaryEntries}
+          onSaveEntry={handleSaveDiaryEntry}
+          onDeleteEntry={handleDeleteDiaryEntry}
         />
       )}
 
@@ -1248,6 +1316,17 @@ export default function App() {
           stats={stats}
           npcs={npcs}
           onOpenEndings={() => setActiveModal('endings')}
+          onNotify={showNotification}
+        />
+      )}
+
+      {/* 11.8 Destiny Card Gacha Modal */}
+      {activeModal === 'destinyCard' && (
+        <DestinyCardModal
+          onClose={() => setActiveModal(null)}
+          stats={stats}
+          onUpdateStats={updateStats}
+          onAddMemory={addGlobalMemory}
           onNotify={showNotification}
         />
       )}

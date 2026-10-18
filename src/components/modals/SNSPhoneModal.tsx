@@ -50,8 +50,34 @@ export const SNSPhoneModal: React.FC<SNSPhoneModalProps> = ({
   onUpdateFavorability,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'stargram' | 'kakao' | 'bubble' | 'delivery' | 'alba' | 'aistudio'
-  >('stargram');
+    'desktop' | 'stargram' | 'kakao' | 'bubble' | 'delivery' | 'alba' | 'aistudio' | 'music' | 'blind'
+  >('desktop');
+
+  // Music Player state
+  const [isPlayingMusic, setIsPlayingMusic] = useState(false);
+  const [currentSong, setCurrentSong] = useState({
+    title: '🌸 春日樱花树下的告白 (Spring Cherry Blossom Lo-Fi)',
+    artist: 'Seoul High School OST',
+    duration: '3:45',
+  });
+
+  // Blind Confession state
+  const [confessions, setConfessions] = useState([
+    {
+      id: 'conf_1',
+      sender: '某高一(1)班神秘男同学',
+      text: '其实每次上课你转头借橡皮的时候，我的心跳都快得要命……希望有一天你能知道我是谁。',
+      time: '昨天 21:30',
+      replied: false,
+    },
+    {
+      id: 'conf_2',
+      sender: '广播社学长',
+      text: '今天午休点播给你的那首IU的《Through the Night》听到了吗？你笑起来真的很好看。',
+      time: '今天 12:10',
+      replied: false,
+    },
+  ]);
 
   // Stargram state
   const [customCaption, setCustomCaption] = useState('');
@@ -473,81 +499,96 @@ export const SNSPhoneModal: React.FC<SNSPhoneModalProps> = ({
           </button>
         </div>
 
-        {/* 6-App Home Screen Navigation Grid */}
-        <div className="grid grid-cols-6 bg-[#ede8df] p-1.5 gap-1 border-b border-[#d6cfc2]">
-          <button
-            onClick={() => setActiveTab('stargram')}
-            className={`py-1.5 px-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex flex-col items-center gap-0.5 ${
-              activeTab === 'stargram'
-                ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-xs'
-                : 'text-[#5a5246] hover:bg-white/50'
-            }`}
-          >
-            <span>📸</span>
-            <span>Stargram</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('kakao')}
-            className={`py-1.5 px-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex flex-col items-center gap-0.5 ${
-              activeTab === 'kakao'
-                ? 'bg-[#fae100] text-[#3b1e1e] shadow-xs'
-                : 'text-[#5a5246] hover:bg-white/50'
-            }`}
-          >
-            <span>💬</span>
-            <span>Kakao群</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('bubble')}
-            className={`py-1.5 px-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex flex-col items-center gap-0.5 ${
-              activeTab === 'bubble'
-                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-xs'
-                : 'text-[#5a5246] hover:bg-white/50'
-            }`}
-          >
-            <span>🫧</span>
-            <span>Bubble</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('delivery')}
-            className={`py-1.5 px-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex flex-col items-center gap-0.5 ${
-              activeTab === 'delivery'
-                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xs'
-                : 'text-[#5a5246] hover:bg-white/50'
-            }`}
-          >
-            <span>🛵</span>
-            <span>闪购外卖</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('alba')}
-            className={`py-1.5 px-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex flex-col items-center gap-0.5 ${
-              activeTab === 'alba'
-                ? 'bg-[#4b6b55] text-white shadow-xs'
-                : 'text-[#5a5246] hover:bg-white/50'
-            }`}
-          >
-            <span>💼</span>
-            <span>兼职通</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('aistudio')}
-            className={`py-1.5 px-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex flex-col items-center gap-0.5 ${
-              activeTab === 'aistudio'
-                ? 'bg-gradient-to-r from-fuchsia-600 to-pink-600 text-white shadow-xs'
-                : 'text-[#5a5246] hover:bg-white/50'
-            }`}
-          >
-            <span>🎨</span>
-            <span>AI生图</span>
-          </button>
-        </div>
+        {/* Smartphone App Top Bar / Back to Desktop Bar */}
+        {activeTab !== 'desktop' && (
+          <div className="bg-[#f0ebe1] px-4 py-2 border-b border-[#d6cfc2] flex items-center justify-between shrink-0">
+            <button
+              onClick={() => setActiveTab('desktop')}
+              className="px-3 py-1 bg-white hover:bg-gray-100 border border-[#d6cfc2] rounded-xl text-xs font-bold text-[#3d352b] flex items-center gap-1 shadow-2xs cursor-pointer"
+            >
+              <span>🏠 返回桌面</span>
+            </button>
+            <span className="text-xs font-bold text-[#5a5246] capitalize">
+              {activeTab === 'stargram' ? 'Stargram 动态' :
+               activeTab === 'kakao' ? 'KakaoTalk 聊天' :
+               activeTab === 'bubble' ? 'Bubble 泡泡' :
+               activeTab === 'delivery' ? '闪购外卖' :
+               activeTab === 'alba' ? 'AlbaMon 兼职' :
+               activeTab === 'aistudio' ? 'AI 生图写真馆' :
+               activeTab === 'music' ? 'Melon 音乐电台' : '匿名表白墙'}
+            </span>
+          </div>
+        )}
 
         {/* Main Smartphone Body */}
         <div
           className="p-3.5 pb-10 overflow-y-auto touch-scroll overscroll-contain flex-1 min-h-0 space-y-3"
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
+          {/* DESKTOP HOME SCREEN */}
+          {activeTab === 'desktop' && (
+            <div className="flex flex-col items-center justify-between h-full py-4 px-2 space-y-6 select-none bg-gradient-to-b from-[#fceef3] via-[#f7f0eb] to-[#e8dff5] rounded-2xl min-h-[420px]">
+              {/* Top Widget */}
+              <div className="w-full bg-white/75 backdrop-blur-md border border-white/90 rounded-2xl p-4 shadow-sm text-[#2b2620] flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-pink-700 flex items-center gap-1">
+                    <span>🌸 首尔女子高中 · 1-1班</span>
+                  </div>
+                  <div className="text-2xl font-black tracking-tight mt-1">12:45 <span className="text-xs font-normal text-gray-500">周一</span></div>
+                  <div className="text-[11px] text-gray-600 mt-0.5">春日晴空 18°C · 空气质量优</div>
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center text-white text-2xl shadow-md">
+                  ☀️
+                </div>
+              </div>
+
+              {/* App Icon Grid (4 columns) */}
+              <div className="grid grid-cols-4 gap-4 w-full px-2">
+                {[
+                  { id: 'stargram', label: 'Stargram', icon: '📸', color: 'bg-gradient-to-br from-pink-500 to-rose-600 text-white' },
+                  { id: 'kakao', label: 'Kakao群', icon: '💬', color: 'bg-[#fae100] text-[#3b1e1e]' },
+                  { id: 'bubble', label: 'Bubble', icon: '🫧', color: 'bg-gradient-to-br from-purple-600 to-indigo-700 text-white' },
+                  { id: 'delivery', label: '闪购外卖', icon: '🛵', color: 'bg-gradient-to-br from-orange-500 to-amber-600 text-white' },
+                  { id: 'alba', label: '兼职通', icon: '💼', color: 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white' },
+                  { id: 'aistudio', label: 'AI生图', icon: '🎨', color: 'bg-gradient-to-br from-fuchsia-600 to-pink-600 text-white' },
+                  { id: 'music', label: '音乐电台', icon: '🎧', color: 'bg-gradient-to-br from-emerald-500 to-cyan-600 text-white' },
+                  { id: 'blind', label: '匿名表白', icon: '💌', color: 'bg-gradient-to-br from-rose-400 to-pink-600 text-white' },
+                ].map((app) => (
+                  <button
+                    key={app.id}
+                    onClick={() => setActiveTab(app.id as any)}
+                    className="flex flex-col items-center gap-1 group cursor-pointer"
+                  >
+                    <div className={`w-14 h-14 rounded-[20px] ${app.color} shadow-lg flex items-center justify-center text-2xl group-hover:scale-105 group-active:scale-95 transition-all border border-white/40`}>
+                      {app.icon}
+                    </div>
+                    <span className="text-[11px] font-bold text-[#3d352b] drop-shadow-xs truncate max-w-[70px]">
+                      {app.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Bottom Dock */}
+              <div className="w-full bg-white/60 backdrop-blur-md border border-white/70 rounded-3xl p-3 flex items-center justify-around shadow-sm">
+                {[
+                  { id: 'stargram', icon: '📸' },
+                  { id: 'kakao', icon: '💬' },
+                  { id: 'bubble', icon: '🫧' },
+                  { id: 'music', icon: '🎧' },
+                ].map((dockApp) => (
+                  <button
+                    key={dockApp.id}
+                    onClick={() => setActiveTab(dockApp.id as any)}
+                    className="w-12 h-12 rounded-2xl bg-white/90 shadow-md flex items-center justify-center text-xl hover:scale-110 transition-transform cursor-pointer"
+                  >
+                    {dockApp.icon}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* TAB 1: STARGRAM */}
           {activeTab === 'stargram' && (
             <>
@@ -1203,6 +1244,112 @@ export const SNSPhoneModal: React.FC<SNSPhoneModalProps> = ({
                   <span>{isGeneratingAvatar ? 'AI 正在绘制高颜值立绘 (约3-6秒)...' : '✨ 立即 AI 生图并设为我的头像'}</span>
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* TAB 7: MELON MUSIC RADIO */}
+          {activeTab === 'music' && (
+            <div className="space-y-3.5">
+              <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-2xl p-4 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold">🎧 Melon 韩国校园 Lo-Fi & K-Pop 音乐电台</div>
+                  <div className="text-[11px] opacity-90 mt-0.5">沉浸式治愈系音符，随时随地放松心情 (+心情)</div>
+                </div>
+                <div className={`w-10 h-10 rounded-full bg-white/20 flex items-center justify-center ${isPlayingMusic ? 'animate-spin' : ''}`}>
+                  💿
+                </div>
+              </div>
+
+              <div className="bg-white border border-[#e0d9cc] rounded-2xl p-4 text-center space-y-3 shadow-2xs">
+                <div className="w-32 h-32 mx-auto rounded-full bg-gradient-to-br from-[#2b2620] to-[#4a4238] border-4 border-amber-300 shadow-xl flex items-center justify-center text-4xl relative overflow-hidden">
+                  <div className={`absolute inset-0 bg-black/20 ${isPlayingMusic ? 'animate-spin' : ''}`} style={{ animationDuration: '4s' }}>
+                    🎵
+                  </div>
+                  <span className="relative z-10 text-white text-xs font-bold">MELON</span>
+                </div>
+
+                <div>
+                  <div className="text-sm font-black text-[#2b2620]">{currentSong.title}</div>
+                  <div className="text-xs text-[#7a6f5e] mt-0.5">{currentSong.artist}</div>
+                </div>
+
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  <button
+                    onClick={() => {
+                      setIsPlayingMusic(!isPlayingMusic);
+                      if (!isPlayingMusic) {
+                        onNotify('🎵 正在播放治愈系校园 Lo-Fi，心情 +10！');
+                      }
+                    }}
+                    className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer"
+                  >
+                    {isPlayingMusic ? '⏸️ 暂停播放' : '▶️ 开始播放电台'}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 text-left">
+                  {[
+                    { title: '🌸 春日樱花路 Lo-Fi', artist: 'Seoul High School OST' },
+                    { title: '☕ 弘大雨后爵士咖啡', artist: 'Hongdae Cafe' },
+                    { title: '🌙 汉江夜风钢琴曲', artist: 'Han River Piano' },
+                    { title: '✨ 顶流女团出道单曲Demo', artist: 'SOOYEON' },
+                  ].map((song, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setCurrentSong({ ...song, duration: '3:30' });
+                        setIsPlayingMusic(true);
+                        onNotify(`🎶 已切换至《${song.title}》！`);
+                      }}
+                      className="p-2 bg-[#f7f4ee] hover:bg-emerald-50 rounded-xl border border-[#e0d9cc] text-left text-xs font-bold truncate cursor-pointer"
+                    >
+                      🎵 {song.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 8: ANONYMOUS CONFESSION WALL */}
+          {activeTab === 'blind' && (
+            <div className="space-y-3">
+              <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-2xl p-3.5 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold">💌 匿名表白与心动盲盒墙</div>
+                  <div className="text-[11px] opacity-90 mt-0.5">全校同学悄悄投递给你的匿名心动纸条，回复可增加人气与好感！</div>
+                </div>
+                <Heart className="w-6 h-6 text-white fill-white animate-pulse" />
+              </div>
+
+              {confessions.map((conf) => (
+                <div key={conf.id} className="bg-white border border-rose-200 rounded-2xl p-3.5 space-y-2 shadow-2xs">
+                  <div className="flex items-center justify-between text-xs font-bold text-rose-900 border-b border-rose-100 pb-1.5">
+                    <span>💌 来自：{conf.sender}</span>
+                    <span className="text-[10px] text-[#7a6f5e]">{conf.time}</span>
+                  </div>
+                  <p className="text-xs text-[#423930] leading-relaxed italic bg-rose-50/50 p-2.5 rounded-xl border border-rose-100">
+                    "{conf.text}"
+                  </p>
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    {conf.replied ? (
+                      <span className="text-[11px] text-emerald-700 font-bold">✅ 已暖心回复</span>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setConfessions((prev) =>
+                            prev.map((c) => (c.id === conf.id ? { ...c, replied: true } : c))
+                          );
+                          onNotify('💌 暖心回复成功发送！全校社交声望 +8，粉丝 +500！');
+                        }}
+                        className="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold cursor-pointer"
+                      >
+                        💌 匿名回信互动
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

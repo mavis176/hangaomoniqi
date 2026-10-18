@@ -94,6 +94,7 @@ export interface GameStats {
   coins: number;           // ₩ 韩元经济
   allowance: number;       // 每周零花钱额度
   snsFollowers: number;    // Stargram 粉丝数
+  specialIdentity?: string;// 开局建立的家世背景/身份称号
 
   // 社团深度养成属性
   clubId: string | null;   // 所属社团 ID ('dance' | 'band' | 'council' | 'sports')
@@ -220,7 +221,8 @@ export interface RandomEvent {
 }
 
 export interface AIConfig {
-  mode: 'builtin' | 'custom';
+  mode: 'builtin' | 'custom' | 'starletter';
+  starletterSceneCode?: string;
   customBaseUrl: string;
   customApiKey: string;
   customModel: string;
@@ -247,6 +249,17 @@ export interface MemoryEntry {
   npcId?: string;
   summary: string;
   category: 'chat' | 'event' | 'gift' | 'lunch' | 'life' | 'exam' | 'family' | 'romance';
+}
+
+export interface DiaryEntry {
+  id: string;
+  dateStr: string;
+  title: string;
+  content: string;
+  mood: string;
+  sticker?: string;
+  weather?: string;
+  createdAt: string;
 }
 
 export interface ForumPost {

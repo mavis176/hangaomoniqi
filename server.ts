@@ -1347,6 +1347,26 @@ ${contextInfo}
     }
   });
 
+  // 1. Download H5 Game Upload Package (for Star-letter / Lofter / H5 Platform Upload)
+  app.get('/api/download-game', (_req, res) => {
+    const filePath = '/tmp/h5_game_upload.zip';
+    if (fs.existsSync(filePath)) {
+      res.download(filePath, 'korean_high_school_simulator_h5.zip');
+    } else {
+      res.status(404).json({ error: 'H5 Game zip not found' });
+    }
+  });
+
+  // 2. Download Full Source Code Archive Endpoint
+  app.get('/api/download-source', (_req, res) => {
+    const filePath = '/tmp/full_source_code.zip';
+    if (fs.existsSync(filePath)) {
+      res.download(filePath, 'korean_high_school_simulator_source.zip');
+    } else {
+      res.status(404).json({ error: 'Source archive not found' });
+    }
+  });
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },

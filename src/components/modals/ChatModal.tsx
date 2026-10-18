@@ -55,9 +55,31 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showMemoryDrawer, setShowMemoryDrawer] = useState(false);
+  const [showMindReading, setShowMindReading] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'keywords' | 'memories'>('keywords');
   const [customMemoryInput, setCustomMemoryInput] = useState('');
   const [customKeywordInput, setCustomKeywordInput] = useState('');
+
+  const getMindReadingText = () => {
+    const fav = npc.favorability || 50;
+    const romance = npc.romancePoints || 0;
+    const stage = npc.relationshipStage || '朋友';
+    const name = npc.chineseName;
+
+    if (stage === '灵魂伴侣' || stage === '恋人' || romance >= 80) {
+      return `${name}现在只要一看见你靠近，心跳就会不由自主地加速。在TA心里，你已经是生命中最不可或缺、最特别的存在。即便表面上装作若无其事，其实满脑子都是你的身影。`;
+    }
+    if (stage === '暧昧' || fav >= 75) {
+      return `${name}对你有着极高且炽热的好感。每次和你对视时，TA都要拼命克制住上扬的嘴角。TA非常渴望能再和你走得近一些，甚至在日记里写满了关于你的点点滴滴。`;
+    }
+    if (stage === '挚友' || fav >= 60) {
+      return `${name}已经将你视为最信任、最交心的挚友。只要有你在身边，TA就觉得格外安心。对于你的秘密和愿望，TA会永远无条件地站在你身后。`;
+    }
+    if (fav >= 40) {
+      return `${name}觉得你是一个很有趣、相处起来很舒服的同学。虽然还在慢慢了解中，但对你的印象分一直在稳步上升，挺期待能和你多聊聊的。`;
+    }
+    return `${name}目前对你还处于观察和试探阶段。虽然没有防备，但内心还有点小羞涩和拘谨，需要你多制造一些共同话题来破冰哦！`;
+  };
 
   const [memoryKeywords, setMemoryKeywords] = useState<string[]>(
     Array.isArray(npc.memoryKeywords) && npc.memoryKeywords.length > 0
@@ -340,6 +362,20 @@ export const ChatModal: React.FC<ChatModalProps> = ({
 
             <div className="flex items-center gap-1.5 shrink-0">
               <button
+                type="button"
+                onClick={() => setShowMindReading(!showMindReading)}
+                className={`px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 border transition-all cursor-pointer ${
+                  showMindReading
+                    ? 'bg-rose-500 text-white border-white shadow-xs'
+                    : 'bg-[#5e4b52]/90 hover:bg-[#5e4b52] text-pink-200 border-pink-400/40'
+                }`}
+                title="实时读取NPC内心独白与情感波动"
+              >
+                <span>🧠</span>
+                <span className="hidden sm:inline">心情读取</span>
+              </button>
+
+              <button
                 onClick={() => setShowMemoryDrawer(!showMemoryDrawer)}
                 className={`px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 border transition-all cursor-pointer ${
                   showMemoryDrawer
@@ -359,6 +395,23 @@ export const ChatModal: React.FC<ChatModalProps> = ({
               </button>
             </div>
           </div>
+
+          {showMindReading && (
+            <div className="mt-2.5 bg-gradient-to-r from-rose-950/90 via-purple-950/90 to-indigo-950/90 border border-pink-400/50 rounded-xl p-3 text-pink-100 text-xs leading-relaxed shadow-lg animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="flex items-center justify-between font-bold text-pink-300 text-[11px] mb-1">
+                <span className="flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-pink-300" />
+                  <span>🧠 【{npc.chineseName}】实时心灵感应与内心独白</span>
+                </span>
+                <span className="text-[10px] bg-pink-500/30 px-2 py-0.5 rounded-full text-pink-200">
+                  好感 {npc.favorability}% · {npc.relationshipStage || '朋友'}
+                </span>
+              </div>
+              <p className="italic text-pink-50/90 bg-black/25 p-2.5 rounded-lg border border-pink-500/20">
+                "{getMindReadingText()}"
+              </p>
+            </div>
+          )}
 
           {/* Personality Ribbon: MBTI & Interests */}
           <div className="mt-2.5 pt-2 border-t border-[#877c6c]/60 flex items-center gap-2 text-[11px] overflow-x-auto no-scrollbar">

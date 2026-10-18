@@ -78,7 +78,13 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({
   const handleTestConnection = async () => {
     setTestStatus('正在测试 AI 接口连接...');
     try {
-      if (form.mode === 'builtin') {
+      if (form.mode === 'starletter') {
+        if (typeof window !== 'undefined' && (window as any).GameSDK?.ai) {
+          setTestStatus('✅ 已成功检测到星匣 GameSDK 官方运行环境！已接入星匣官方 AI 引擎。');
+        } else {
+          setTestStatus('ℹ️ 当前处于 Web 预览环境，星匣 GameSDK AI 将在您发布并运行在星匣/Lofter 客户端时自动生效（未在平台时自动退避至内置引擎）。');
+        }
+      } else if (form.mode === 'builtin') {
         const res = await fetch('/api/health');
         const data = await res.json();
         if (data.status === 'ok') {
@@ -118,65 +124,106 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({
       <div className="bg-[#ece6db] border-2 border-[#f7f4ee] rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-[0_12px_40px_rgba(0,0,0,0.45)] overflow-hidden text-[#2b2620]">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 bg-gradient-to-r from-[#6b6356] to-[#857b6b] text-white border-b border-[#b5ab99]">
+        <div className="flex items-center justify-between px-3 py-2 sm:px-4 sm:py-2.5 bg-gradient-to-r from-[#6b6356] to-[#857b6b] text-white border-b border-[#b5ab99]">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-[#f5d68e]" />
-            <h2 className="text-base sm:text-lg font-bold tracking-wide">AI 剧情引擎与 API 接口设置</h2>
+            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-[#f5d68e]" />
+            <h2 className="text-xs sm:text-base font-bold tracking-wide">AI 剧情引擎与星匣/自定义 API 接口设置</h2>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-[#524b40]/60 hover:bg-[#524b40] flex items-center justify-center text-white cursor-pointer"
+            className="w-7 h-7 rounded-full bg-[#524b40]/60 hover:bg-[#524b40] flex items-center justify-center text-white cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-5 overflow-y-auto space-y-4">
+        <div className="p-4 sm:p-5 overflow-y-auto space-y-4">
           {/* 1. AI Mode Switcher */}
-          <div className="bg-[#f7f4ee] border border-[#cfc8ba] rounded-xl p-4 space-y-3">
+          <div className="bg-[#f7f4ee] border border-[#cfc8ba] rounded-xl p-3.5 space-y-3">
             <div className="text-xs font-bold text-[#4a4237] flex items-center gap-1.5">
               <Globe className="w-4 h-4 text-[#8c6d3b]" />
               <span>AI 接口模式选择</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => setForm({ ...form, mode: 'builtin' })}
-                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                   form.mode === 'builtin'
                     ? 'bg-[#efe8d8] border-[#8c6d3b] shadow-xs'
                     : 'bg-[#ece8e0] border-[#cfc8ba] opacity-80'
                 }`}
               >
-                <div className="font-bold text-xs sm:text-sm text-[#2b2620] flex items-center justify-between">
-                  <span>内置 Gemini AI (推荐)</span>
-                  {form.mode === 'builtin' && <Check className="w-4 h-4 text-[#6b8e63]" />}
+                <div className="font-bold text-xs text-[#2b2620] flex items-center justify-between">
+                  <span>内置 Gemini AI</span>
+                  {form.mode === 'builtin' && <Check className="w-3.5 h-3.5 text-[#6b8e63]" />}
                 </div>
-                <div className="text-[11px] text-[#6e6558] mt-1">
-                  免配置开箱即用，支持同学AI实时对话、动态突发事件与校内匿名墙。
+                <div className="text-[10px] text-[#6e6558] mt-1">
+                  开箱即用，支持对话与动态剧情。
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, mode: 'starletter', starletterSceneCode: form.starletterSceneCode || 'school_npc_chat' })}
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                  form.mode === 'starletter'
+                    ? 'bg-amber-100/90 border-amber-600 shadow-xs'
+                    : 'bg-[#ece8e0] border-[#cfc8ba] opacity-80'
+                }`}
+              >
+                <div className="font-bold text-xs text-[#2b2620] flex items-center justify-between">
+                  <span className="text-amber-950 font-black">🌟 星匣官方 AI</span>
+                  {form.mode === 'starletter' && <Check className="w-3.5 h-3.5 text-amber-700" />}
+                </div>
+                <div className="text-[10px] text-[#6e6558] mt-1">
+                  星匣/Lofter 平台 GameSDK 官方 AI 引擎。
                 </div>
               </button>
 
               <button
                 type="button"
                 onClick={() => setForm({ ...form, mode: 'custom' })}
-                className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                   form.mode === 'custom'
                     ? 'bg-[#efe8d8] border-[#8c6d3b] shadow-xs'
                     : 'bg-[#ece8e0] border-[#cfc8ba] opacity-80'
                 }`}
               >
-                <div className="font-bold text-xs sm:text-sm text-[#2b2620] flex items-center justify-between">
-                  <span>连接自定义 API 接口</span>
-                  {form.mode === 'custom' && <Check className="w-4 h-4 text-[#6b8e63]" />}
+                <div className="font-bold text-xs text-[#2b2620] flex items-center justify-between">
+                  <span>自定义 API 接口</span>
+                  {form.mode === 'custom' && <Check className="w-3.5 h-3.5 text-[#6b8e63]" />}
                 </div>
-                <div className="text-[11px] text-[#6e6558] mt-1">
-                  支持接入 OpenAI / DeepSeek / 硅基流动等兼容 `/v1/chat/completions` 的接口。
+                <div className="text-[10px] text-[#6e6558] mt-1">
+                  接入 OpenAI / DeepSeek 等接口。
                 </div>
               </button>
             </div>
+
+            {form.mode === 'starletter' && (
+              <div className="space-y-2 pt-2.5 border-t border-[#dfd9ce] bg-amber-50/70 p-3 rounded-xl border border-amber-200">
+                <div className="text-xs font-black text-amber-950 flex items-center gap-1">
+                  <span>🌟 星匣 GameSDK.ai 官方引擎场景配置</span>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#5a5246] mb-1">
+                    星匣 AI 场景代码 (Scene Code)
+                  </label>
+                  <input
+                    type="text"
+                    value={form.starletterSceneCode || 'school_npc_chat'}
+                    onChange={(e) => setForm({ ...form, starletterSceneCode: e.target.value })}
+                    placeholder="school_npc_chat"
+                    className="w-full bg-white border border-amber-300 rounded-lg px-3 py-1.5 text-xs text-[#2b2620] font-mono"
+                  />
+                  <p className="text-[10px] text-[#786b59] mt-1.5 leading-relaxed">
+                    填入您在星匣创作者后台【能力配置-AI场景】中创建的场景代码（缺省为 <code className="bg-amber-100 px-1 py-0.2 rounded text-amber-900">school_npc_chat</code>）。
+                  </p>
+                </div>
+              </div>
+            )}
 
             {form.mode === 'custom' && (
               <div className="space-y-2.5 pt-2 border-t border-[#dfd9ce]">

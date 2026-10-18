@@ -295,10 +295,34 @@ export const WeeklySchedulerModal: React.FC<WeeklySchedulerModalProps> = ({
         </div>
 
         {/* Footer Execute Button */}
-        <div className="px-4 py-3 bg-[#e6dfd3] border-t border-[#cfc7b8] flex items-center justify-between gap-3">
-          <div className="text-xs text-[#4a4238]">
-            零花钱入账: <span className="font-bold text-emerald-700">+₩{stats.allowance.toLocaleString()}</span>
+        <div className="px-4 py-3 bg-[#e6dfd3] border-t border-[#cfc7b8] flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                let nextWk = weekInYear + 4;
+                let nextYr = gradeYear;
+                if (nextWk > 36) {
+                  if (gradeYear < 3) {
+                    nextYr = gradeYear + 1;
+                    nextWk = 1;
+                  } else {
+                    nextWk = 36;
+                  }
+                }
+                onJumpToWeek(nextYr, nextWk, `🚀 极速冲刺：成功跃迁至高${nextYr}第${nextWk}周！学业与能力迅速成长。`);
+                onClose();
+              }}
+              className="px-3.5 py-2 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+            >
+              <FastForward className="w-3.5 h-3.5" />
+              <span>🚀 极速跨月跃迁 (+4周)</span>
+            </button>
+            <span className="text-xs text-[#4a4238] hidden sm:inline">
+              零花钱: <span className="font-bold text-emerald-700">+₩{stats.allowance.toLocaleString()}</span>
+            </span>
           </div>
+
           <button
             onClick={() => {
               onExecuteTurn(selectedActions, preferredEventCat);

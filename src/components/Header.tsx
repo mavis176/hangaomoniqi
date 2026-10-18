@@ -9,6 +9,7 @@ interface HeaderProps {
   aiConfig: AIConfig;
   unlockedEndingsCount: number;
   protagonistAvatarUrl?: string;
+  protagonistName?: string;
   onOpenAISettings: () => void;
   onOpenWardrobe: () => void;
   onOpenSNS: () => void;
@@ -16,6 +17,7 @@ interface HeaderProps {
   onOpenLifePath: () => void;
   onOpenMap?: () => void;
   onOpenPortraitWorkshop?: () => void;
+  onOpenCharacterCreation?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -24,6 +26,7 @@ export const Header: React.FC<HeaderProps> = ({
   aiConfig,
   unlockedEndingsCount,
   protagonistAvatarUrl,
+  protagonistName,
   onOpenAISettings,
   onOpenWardrobe,
   onOpenSNS,
@@ -31,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenLifePath,
   onOpenMap,
   onOpenPortraitWorkshop,
+  onOpenCharacterCreation,
 }) => {
   const moodLabel = stats.mood >= 75 ? '极佳' : stats.mood >= 45 ? '普通' : '低落';
   const avatarSrc = protagonistAvatarUrl || protagonistAvatar;
@@ -47,7 +51,7 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <img
               src={avatarSrc}
-              alt="李秀妍"
+              alt={protagonistName || '李秀妍'}
               className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform"
               referrerPolicy="no-referrer"
             />
@@ -55,9 +59,20 @@ export const Header: React.FC<HeaderProps> = ({
 
           <div className="bg-gradient-to-b from-[#969087]/90 to-[#7d776e]/90 border border-[#bdb7ad]/70 rounded-xl px-1.5 py-1 sm:px-2.5 sm:py-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.35)] flex flex-col justify-center min-w-[84px] sm:min-w-[112px] md:min-w-[136px]">
             <div className="flex items-center justify-between gap-1">
-              <span className="font-bold text-white text-xs sm:text-sm md:text-base tracking-wide drop-shadow-sm leading-none">
-                李秀妍
-              </span>
+              <div className="flex items-center gap-1 min-w-0">
+                <span className="font-bold text-white text-xs sm:text-sm md:text-base tracking-wide drop-shadow-sm leading-none truncate">
+                  {protagonistName || '李秀妍'}
+                </span>
+                {onOpenCharacterCreation && (
+                  <button
+                    onClick={onOpenCharacterCreation}
+                    className="text-[9px] text-amber-200 hover:text-amber-100 hover:underline font-bold shrink-0 cursor-pointer"
+                    title="重新创建角色/重刷家世背景与初始属性"
+                  >
+                    🎲重置
+                  </button>
+                )}
+              </div>
               <span className="bg-[#5c6d7e] border border-[#8396a8]/60 text-white text-[9px] sm:text-[10px] font-bold px-1 py-0.5 rounded leading-none shadow-inner">
                 高{gradeYear}
               </span>

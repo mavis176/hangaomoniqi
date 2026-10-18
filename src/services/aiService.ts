@@ -24,6 +24,49 @@ export async function generateNpcChatReply(params: {
 }): Promise<NpcChatAIResponse> {
   const { aiConfig, npc, userMessage, history, memories, stats, location, timeContext } = params;
 
+  // 0. Auto-Detect Star-Letter (星匣) GameSDK.ai
+  if (typeof window !== 'undefined' && (window as any).GameSDK?.ai) {
+    try {
+      const sdk = (window as any).GameSDK;
+      const historyText = history
+        .slice(-6)
+        .map((m) => `${m.sender === 'user' ? '李秀妍' : npc.chineseName}: ${m.text}`)
+        .join('\n');
+
+      const systemPrompt = `你扮演首尔女高【${npc.chineseName}】（${npc.koreanName}，身份：${npc.role}）。
+MBTI：${npc.mbti}，关系阶段：${npc.relationshipStage}（好感度 ${npc.favorability}）。用极具真实呼吸感的韩国女高生日常口语回答，绝不复读对方的话，绝不使用AI客服腔。必须返回纯JSON对象：
+{
+  "reply": "自然鲜活的口语台词",
+  "innerThought": "心理活动",
+  "actionDesc": "神态小动作",
+  "newMemory": "",
+  "extractedKeywords": ["记忆标签"],
+  "favorabilityDelta": 5,
+  "moodDelta": 5,
+  "socialDelta": 3,
+  "suggestedReplies": ["回复1", "回复2", "回复3"]
+}`;
+
+      // Clone plain JS objects to avoid structured clone issues with GameSDK Penpal iframe bridge
+      const plainMessages = JSON.parse(JSON.stringify([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `刚才的对话上下文：\n${historyText}\n\n李秀妍刚刚对你说：“${userMessage}”` }
+      ]));
+
+      const sdkRes = await sdk.ai.chat({
+        sceneCode: 'school_npc_chat', // 星匣创作者后台配置的 AI 场景 Code
+        messages: plainMessages
+      });
+
+      if (sdkRes && sdkRes.content) {
+        const cleaned = sdkRes.content.replace(/```json|```/g, '').trim();
+        return JSON.parse(cleaned);
+      }
+    } catch (err) {
+      console.warn('星匣 GameSDK AI 引擎响应异常，已自动降级：', err);
+    }
+  }
+
   if (aiConfig.mode === 'custom' && aiConfig.customBaseUrl && aiConfig.customApiKey) {
     const historyText = history
       .slice(-8)

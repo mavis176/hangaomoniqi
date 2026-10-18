@@ -42,6 +42,7 @@ interface MainHallwayProps {
   onOpenMap?: () => void;
   onOpenPortraitWorkshop?: () => void;
   onOpenRelationships?: () => void;
+  onOpenDestinyCard?: () => void;
 }
 
 export const MainHallway: React.FC<MainHallwayProps> = ({
@@ -70,6 +71,7 @@ export const MainHallway: React.FC<MainHallwayProps> = ({
   onOpenMap,
   onOpenPortraitWorkshop,
   onOpenRelationships,
+  onOpenDestinyCard,
 }) => {
   const weekInfo = getWeekCalendarInfo(gradeYear, weekInYear);
   const weekdayLabel = WEEKDAYS[dayInWeek % 7] || '周一';
@@ -211,7 +213,68 @@ export const MainHallway: React.FC<MainHallwayProps> = ({
             <BookHeart className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             <span>手帐({totalMemoriesCount})</span>
           </button>
+          <span aria-hidden="true">·</span>
+          <button
+            onClick={() => onOpenDestinyCard?.()}
+            className="inline-flex items-center gap-1 text-amber-200 hover:underline font-bold cursor-pointer animate-pulse"
+            title="抽取今日命运奇遇卡，触发随机高额奖励与心动事件"
+          >
+            <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-300" />
+            <span>🎲命运奇遇</span>
+          </button>
         </div>
+
+        {/* Semester & Exam Distance Progress Bar */}
+        {(() => {
+          const currentSemesterNum = weekInYear <= 18 ? 1 : 2;
+          const semesterLabel = `高${gradeYear} · 第${currentSemesterNum === 1 ? '上' : '下'}学期`;
+          const semesterProgressPct = Math.round((((weekInYear - 1) % 18) / 18) * 100);
+          const totalThreeYearsPct = Math.round((((gradeYear - 1) * 36 + weekInYear) / (3 * 36)) * 100);
+
+          let weeksToNextExam = 0;
+          let nextExamTitle = '期末大考';
+          const examWeeks = [
+            { wk: 6, title: '4月期中考' },
+            { wk: 12, title: '6月期末考' },
+            { wk: 24, title: '10月期中考' },
+            { wk: 32, title: '12月期末大考' },
+          ];
+          const upcoming = examWeeks.find((e) => e.wk >= weekInYear);
+          if (upcoming) {
+            weeksToNextExam = upcoming.wk - weekInYear;
+            nextExamTitle = upcoming.title;
+          } else {
+            weeksToNextExam = 36 - weekInYear + 6;
+            nextExamTitle = '下学期期中考';
+          }
+
+          return (
+            <div className="mt-2 mx-auto max-w-xl bg-[#4a443b]/90 backdrop-blur-md border border-[#d4cec3]/60 text-[#f7f4ee] px-3.5 py-2 rounded-2xl shadow-xl pointer-events-auto">
+              <div className="flex items-center justify-between text-xs font-bold mb-1.5">
+                <div className="flex items-center gap-1.5 text-amber-300">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{semesterLabel} · {weekInfo.month}月教学阶段</span>
+                </div>
+                <div className="text-[11px] text-[#f5d68e] bg-[#2e2922]/80 px-2 py-0.5 rounded-full border border-amber-500/30">
+                  {weeksToNextExam === 0 ? '🔥 本周迎来大考！' : `距离【${nextExamTitle}】还有 ${weeksToNextExam} 周`}
+                </div>
+              </div>
+
+              {/* Progress bar visual */}
+              <div className="w-full bg-[#2e2922] h-2.5 rounded-full overflow-hidden p-0.5 border border-[#6b6255]">
+                <div
+                  className="bg-gradient-to-r from-amber-500 via-yellow-400 to-emerald-400 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${Math.max(4, Math.min(100, semesterProgressPct))}%` }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-[10px] text-[#c4b9a8] mt-1">
+                <span>学期进度：{semesterProgressPct}% (本学期第{((weekInYear - 1) % 18) + 1}/18周)</span>
+                <span>三年总进度：{totalThreeYearsPct}%</span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* 3. Bottom Area: Daily/Weekly Scheduler Card (Clean & Responsive for Mobile) */}
