@@ -61,6 +61,10 @@ import {
   RelationshipChangePromptModal,
   RelationshipChangePromptData,
 } from './components/modals/RelationshipChangePromptModal';
+import {
+  ChoiceResultModal,
+  ChoiceResultData,
+} from './components/modals/ChoiceResultModal';
 import { MapActionItem, MapLocationInfo } from './data/mapData';
 
 export default function App() {
@@ -105,6 +109,7 @@ export default function App() {
   const [pendingRelationshipChange, setPendingRelationshipChange] =
     useState<RelationshipChangePromptData | null>(null);
   const [isGeneratingAIEvent, setIsGeneratingAIEvent] = useState<boolean>(false);
+  const [choiceResultData, setChoiceResultData] = useState<ChoiceResultData | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const showNotification = (msg: string) => {
@@ -417,16 +422,31 @@ export default function App() {
     if (action.costStamina) {
       deltaEffect.stamina = (deltaEffect.stamina || 0) - action.costStamina;
     }
-    applyDeltaStats(deltaEffect);
 
-    if (action.favNpcId && action.favDelta) {
-      updateFavorability(action.favNpcId, action.favDelta, action.romanceDelta || 3);
-      addNpcMemory(action.favNpcId, `[${loc.name}] ${action.memoryLog}`);
-    } else {
-      addGlobalMemory(`[高${gradeYear}第${weekInYear}周·${loc.name}] ${action.memoryLog}`, 'life');
-    }
+    const targetNpc = action.favNpcId ? npcs.find((n) => n.id === action.favNpcId) : undefined;
+    const favArr = action.favNpcId && action.favDelta
+      ? [{ npcId: action.favNpcId, npcName: targetNpc?.chineseName || action.favNpcId, amount: action.favDelta }]
+      : [];
 
-    showNotification(`✨ ${action.successMessage}`);
+    const memText = `[高${gradeYear}第${weekInYear}周·${loc.name}] ${action.memoryLog}`;
+
+    setChoiceResultData({
+      title: `地图行动结算说明 · 【${loc.name} - ${action.name}】`,
+      description: action.successMessage || `你在【${loc.name}】进行了【${action.name}】，度过了一段充实的时光。`,
+      deltas: deltaEffect,
+      favorabilityChanges: favArr,
+      memoryLog: memText,
+      onConfirm: () => {
+        applyDeltaStats(deltaEffect);
+        if (action.favNpcId && action.favDelta) {
+          updateFavorability(action.favNpcId, action.favDelta, action.romanceDelta || 3);
+          addNpcMemory(action.favNpcId, memText);
+        } else {
+          addGlobalMemory(memText, 'life');
+        }
+        setChoiceResultData(null);
+      },
+    });
   };
 
   const handleSetCurrentLocation = (locName: string, bgUrl?: string) => {
@@ -675,54 +695,65 @@ export default function App() {
       combinedDelta.mood = (combinedDelta.mood || 0) - 4;
     }
 
-    applyDeltaStats(combinedDelta);
-
     const actionSummary = selectedActions.map((a) => a.name).join(' + ');
-    addGlobalMemory(`完成了本周行动【${actionSummary}】，领取周零花钱 ₩${stats.allowance.toLocaleString()}。`, 'life');
+    const memText = `完成了本周行动【${actionSummary}】，领取周零花钱 ₩${stats.allowance.toLocaleString()}。`;
 
-    let examNotice = '';
-    if (weekInfo.milestoneExam) {
-      const rec = performExamSettlement(
-        weekInfo.milestoneExam.type,
-        stats.academics + (combinedDelta.academics || 0),
-        gradeYear,
-        weekInYear
-      );
-      examNotice = ` | 📢 ${rec.examName}: ${rec.score}分(${rec.gradeRank}等级)`;
-    }
+    setChoiceResultData({
+      title: `高${gradeYear}第${weekInYear}周 · 行动回合结算说明`,
+      description: `你顺利完成了本周排程：【${actionSummary}】，本周获得零花钱 ₩${stats.allowance.toLocaleString()}。`,
+      deltas: combinedDelta,
+      memoryLog: memText,
+      onConfirm: () => {
+        applyDeltaStats(combinedDelta);
+        addGlobalMemory(memText, 'life');
 
-    let nextYear = gradeYear;
-    let nextWeek = weekInYear + 1;
-    if (nextWeek > 36) {
-      if (gradeYear < 3) {
-        nextYear = gradeYear + 1;
-        nextWeek = 1;
-        showNotification(`🌸 恭喜升入高${nextYear}学年（${2024 + nextYear}年3月）！新学期开始了！`);
-      } else {
-        setActiveModal('endings');
-        showNotification('🎓 三年高中生涯圆满结束！迎来了首尔女子高中毕业典礼与结局结算！');
-        return;
-      }
-    } else {
-      showNotification(
-        `已推进至高${nextYear}第${nextWeek}周！零花钱 +₩${stats.allowance.toLocaleString()}${examNotice}`
-      );
-    }
+        let examNotice = '';
+        if (weekInfo.milestoneExam) {
+          const rec = performExamSettlement(
+            weekInfo.milestoneExam.type,
+            stats.academics + (combinedDelta.academics || 0),
+            gradeYear,
+            weekInYear
+          );
+          examNotice = ` | 📢 ${rec.examName}: ${rec.score}分(${rec.gradeRank}等级)`;
+        }
 
-    setGradeYear(nextYear);
-    setWeekInYear(nextWeek);
-    setDayInWeek(0);
+        let nextYear = gradeYear;
+        let nextWeek = weekInYear + 1;
+        if (nextWeek > 36) {
+          if (gradeYear < 3) {
+            nextYear = gradeYear + 1;
+            nextWeek = 1;
+            showNotification(`🌸 恭喜升入高${nextYear}学年（${2024 + nextYear}年3月）！新学期开始了！`);
+          } else {
+            setActiveModal('endings');
+            showNotification('🎓 三年高中生涯圆满结束！迎来了首尔女子高中毕业典礼与结局结算！');
+            setChoiceResultData(null);
+            return;
+          }
+        } else {
+          showNotification(
+            `已推进至高${nextYear}第${nextWeek}周！零花钱 +₩${stats.allowance.toLocaleString()}${examNotice}`
+          );
+        }
 
-    const nextWeekInfo = getWeekCalendarInfo(nextYear, nextWeek);
-    const ev = pickWeeklyEvent({
-      year: nextYear,
-      week: nextWeek,
-      season: nextWeekInfo.season,
-      stats,
-      npcs,
-      preferredCategory: preferredEventCategory,
+        setGradeYear(nextYear);
+        setWeekInYear(nextWeek);
+        setDayInWeek(0);
+
+        const nextWeekInfo = getWeekCalendarInfo(nextYear, nextWeek);
+        const ev = pickWeeklyEvent({
+          year: nextYear,
+          week: nextWeek,
+          season: nextWeekInfo.season,
+          stats,
+          npcs,
+          preferredCategory: preferredEventCategory,
+        });
+        setActiveEvent(ev);
+        setChoiceResultData(null);
+      },
     });
-    setActiveEvent(ev);
   };
 
   // Trigger Event from 220+ Pool or AI Engine
@@ -776,21 +807,37 @@ export default function App() {
 
   const handleBuyItem = (itemId: string, price: number, bonus: number) => {
     const boughtItem = wardrobe.find((i) => i.id === itemId);
-    updateStats({
-      coins: stats.coins - price,
-      appearance: Math.min(100, stats.appearance + bonus),
-      social: Math.min(100, stats.social + (boughtItem?.socialBonus || 2)),
+    const delta = {
+      coins: -price,
+      appearance: bonus,
+      social: boughtItem?.socialBonus || 2,
+    };
+    const memText = boughtItem ? `购入并换上了新装扮【${boughtItem.name}】，外形与校园时尚度提升。` : '购入新衣物。';
+
+    setChoiceResultData({
+      title: '购物与衣橱穿搭结算说明',
+      description: `你成功购买并换上了【${boughtItem?.name || '新衣物'}】，焕然一新！`,
+      deltas: delta,
+      memoryLog: memText,
+      onConfirm: () => {
+        updateStats({
+          coins: stats.coins - price,
+          appearance: Math.min(100, stats.appearance + bonus),
+          social: Math.min(100, stats.social + (boughtItem?.socialBonus || 2)),
+        });
+        setWardrobe((prev) =>
+          prev.map((item) => {
+            if (item.id === itemId) return { ...item, owned: true, equipped: true };
+            if (boughtItem && item.type === boughtItem.type) return { ...item, equipped: false };
+            return item;
+          })
+        );
+        if (boughtItem) {
+          addGlobalMemory(memText, 'life');
+        }
+        setChoiceResultData(null);
+      },
     });
-    setWardrobe((prev) =>
-      prev.map((item) => {
-        if (item.id === itemId) return { ...item, owned: true, equipped: true };
-        if (boughtItem && item.type === boughtItem.type) return { ...item, equipped: false };
-        return item;
-      })
-    );
-    if (boughtItem) {
-      addGlobalMemory(`购入并换上了新装扮【${boughtItem.name}】，外形与校园时尚度提升。`, 'life');
-    }
   };
 
   const handleEquipItem = (itemId: string) => {
@@ -812,16 +859,31 @@ export default function App() {
     favChange?: { npcId: string; amount: number },
     memoryLog?: string
   ) => {
-    applyDeltaStats(effect);
-    if (favChange && favChange.npcId) {
-      updateFavorability(favChange.npcId, favChange.amount, 6);
-      if (memoryLog) {
-        addNpcMemory(favChange.npcId, `[高${gradeYear}第${weekInYear}周] ${memoryLog}`);
-      }
-    } else if (memoryLog) {
-      addGlobalMemory(memoryLog, 'event');
-    }
-    setActiveEvent(null);
+    const targetNpc = favChange?.npcId ? npcs.find((n) => n.id === favChange.npcId) : undefined;
+    const favArr = favChange
+      ? [{ npcId: favChange.npcId, npcName: targetNpc?.chineseName || favChange.npcId, amount: favChange.amount }]
+      : [];
+
+    setChoiceResultData({
+      title: activeEvent?.title || '校园突发事件抉择说明',
+      description: memoryLog || '你做出了抉择，校园生活因此留下了深刻的印记。',
+      deltas: effect,
+      favorabilityChanges: favArr,
+      memoryLog: memoryLog,
+      onConfirm: () => {
+        applyDeltaStats(effect);
+        if (favChange && favChange.npcId) {
+          updateFavorability(favChange.npcId, favChange.amount, 6);
+          if (memoryLog) {
+            addNpcMemory(favChange.npcId, `[高${gradeYear}第${weekInYear}周] ${memoryLog}`);
+          }
+        } else if (memoryLog) {
+          addGlobalMemory(memoryLog, 'event');
+        }
+        setActiveEvent(null);
+        setChoiceResultData(null);
+      },
+    });
   };
 
   const handleUnlockEnding = (endingId: string) => {
@@ -1009,9 +1071,20 @@ export default function App() {
           onClose={() => setActiveModal(null)}
           stats={stats}
           onUpdateStats={(newSt) => updateStats(newSt)}
-          onNotify={(msg) => {
-            addGlobalMemory(msg, 'life');
-            showNotification(msg);
+          onNotify={showNotification}
+          onShowResultModal={(data) => {
+            setChoiceResultData({
+              title: data.title,
+              description: data.description,
+              deltas: data.deltas,
+              memoryLog: data.memoryLog,
+              onConfirm: () => {
+                updateStats(data.deltas);
+                addGlobalMemory(data.memoryLog, 'life');
+                setChoiceResultData(null);
+                setActiveModal(null);
+              },
+            });
           }}
         />
       )}
@@ -1326,6 +1399,9 @@ export default function App() {
       )}
 
       {activeEvent && <EventModal event={activeEvent} onResolve={handleResolveEvent} />}
+
+      {/* 19. Choice / Action Result Popup Explanation Modal */}
+      {choiceResultData && <ChoiceResultModal data={choiceResultData} />}
     </div>
   );
 }

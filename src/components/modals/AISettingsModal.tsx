@@ -25,6 +25,41 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({
   const [customStoryPrompt, setCustomStoryPrompt] = useState('');
   const [bgInput, setBgInput] = useState(customBgUrl || '');
   const [testStatus, setTestStatus] = useState<string | null>(null);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
+
+  const handleFetchModels = async () => {
+    if (!form.customBaseUrl || !form.customApiKey) {
+      setTestStatus('❌ 请先填写 API Base URL 和 API Key 才能拉取模型列表');
+      return;
+    }
+    setFetchingModels(true);
+    setTestStatus('正在从 API 拉取可用模型列表...');
+    try {
+      const res = await fetch('/api/ai/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          baseUrl: form.customBaseUrl,
+          apiKey: form.customApiKey,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.models)) {
+        setFetchedModels(data.models);
+        setTestStatus(`✅ 成功拉取 ${data.models.length} 个可用模型！可在下方选择。`);
+        if (data.models.length > 0 && !form.customModel) {
+          setForm({ ...form, customModel: data.models[0] });
+        }
+      } else {
+        setTestStatus(`❌ 拉取失败：${data.error || '未知错误'}`);
+      }
+    } catch (e: any) {
+      setTestStatus(`❌ 拉取出错：${e?.message}`);
+    } finally {
+      setFetchingModels(false);
+    }
+  };
 
   const styles = [
     '写实唯美韩剧青春校园风',
@@ -171,9 +206,19 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-[#5a5246] mb-1">
-                      模型名称 (Model)
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-bold text-[#5a5246]">
+                        模型名称 (Model)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleFetchModels}
+                        disabled={fetchingModels}
+                        className="text-[10px] text-[#8c6d3b] hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        {fetchingModels ? '拉取中...' : '🔄 自动拉取模型列表'}
+                      </button>
+                    </div>
                     <input
                       type="text"
                       value={form.customModel}
@@ -181,6 +226,24 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({
                       placeholder="gpt-4o-mini / deepseek-chat"
                       className="w-full bg-white border border-[#c7bfb0] rounded-lg px-3 py-1.5 text-xs text-[#2b2620]"
                     />
+                    {fetchedModels.length > 0 && (
+                      <div className="mt-1.5">
+                        <select
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              setForm({ ...form, customModel: e.target.value });
+                            }
+                          }}
+                          className="w-full bg-white border border-[#c7bfb0] rounded-lg px-2 py-1 text-xs text-[#2b2620]"
+                          defaultValue=""
+                        >
+                          <option value="" disabled>-- 点击快速选择已拉取模型 --</option>
+                          {fetchedModels.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

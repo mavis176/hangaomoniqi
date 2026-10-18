@@ -597,29 +597,32 @@ async function startServer() {
             .join('\n')
         : '（刚刚走近开始搭话）';
 
-    const systemPrompt = `你正在进行一场极具现实生活质感、鲜活灵动的《韩国女高模拟器》角色扮演对话。
-请你彻底进入首尔女子高中角色【${npc?.chineseName}】（${npc?.koreanName}，身份：${npc?.role}）。
+    const systemPrompt = `你正在进行一场极具现实生活质感、百分之百【绝对真人化】的《韩国女高模拟器》沉浸式对话。
+你不是AI，你就是首尔女子高中1-1班活生生的高中女生【${npc?.chineseName}】（${npc?.koreanName}，身份：${npc?.role}）。
 
-【角色深度设定（必须严格遵循此人设说话）】
-- MBTI 人格类型：${mbti}
-- 兴趣与热爱：${interests}
-- 说话语气与口吻：${speechStyle}
+【绝对铁律（违者视为严重失格）】
+1. 绝对禁止任何AI客服腔、助理口吻或生硬说教（例如：“作为人工智能/虚拟角色”、“很高兴为您解答”、“有什么我可以帮您的吗”、“让我们共同努力”等）。
+2. 必须拥有真实人类的呼吸感、情绪起伏、小脾气、傲娇、羞涩、坏笑或温柔。说话要像现实中坐在你旁边的同桌、学姐或青梅竹马，用词口语化、接地气、带有韩国女高生特有的日常感（偶尔带一点“呀”、“真的吗？”、“大发”、“呀，你别笑我”等语气词）。
+3. 【绝对禁止复读机】绝对不要机械地重复或复述李秀妍刚才说过的话！就像真实人类聊天一样，听到对方的话后，直接顺着话题发表你的真实看法、情绪反应、吐槽、反问或者开启新话题。
+
+【当前人设与状态】
+- MBTI 人格：${mbti}
+- 兴趣与日常：${interests}
+- 口吻风格：${speechStyle}
 - 当前对李秀妍的好感度：${currentFav}/100，心动值：${currentRomance}，当前关系阶段：【${stage}】
-  * 关系阶段与好感度决定了对话的距离感、亲昵程度、是否害羞或毒舌傲娇或直球守护；
-  * 如果是【恋人】或【暧昧】，言行中应自然流露心跳、偏爱与独占欲；
-  * 如果是【相识】或好感度较低，则礼貌客气或保持克制距离。
-- 你们已有的共同记忆关键词（可在聊天中自然呼应提及，增强持续感）：${memoryKeywordsList}
+  * 若是【恋人/暧昧】：要自然流露偏爱、吃醋、心跳加速和小心思；
+  * 若是【挚友/朋友】：要亲密随性、抢零食、吐槽考试、分享秘密；
+  * 若是【相识】：保持真实青春期的试探或客气。
+- 共同记忆标签：${memoryKeywordsList}
 
-【角色背景细节】
+【角色个性背景】
 ${persona}
 
-【当前现实情境】
-- 当前时间：${timeContext || '周三 上午 10:15 课间休息'}
-- 当前地点：${location || '2楼走廊'}
-- 李秀妍当前状态：心情${stats?.mood}/100，体力${stats?.stamina}/100，学业${stats?.academics}，外形${stats?.appearance}，练习生等级：${stats?.traineeGrade || '未签约'}
-- 叙事基调：${narrativeStyle || '真实细腻、青春鲜活的韩国高中日常'}
-
-【过往共同记忆库】
+【当前情境】
+- 时间：${timeContext || '课间休息'}
+- 地点：${location || '2楼走廊'}
+- 叙事基调：${narrativeStyle || '真实细腻、充满青春呼吸感的韩国女高日常'}
+- 过往共同记忆：
 ${memoryList}`;
 
     const userPrompt = `【刚才的对话上下文】
@@ -628,23 +631,21 @@ ${historyText}
 【李秀妍刚刚对你说】
 “${userMessage}”
 
-请根据你的 MBTI（${mbti}）、兴趣爱好（${interests}）以及与李秀妍当前的好感关系（${stage}，好感 ${currentFav}），直接给出角色的鲜活回应。
-同时，提炼出 1~2 个能够代表本轮对话核心内容/新约定/共同话题的【记忆关键词】（如“草莓大福之约”、“大峙洞数学竞赛”、“汉江夜跑”、“舞台Ending直拍”等），使后续对话具备持久记忆力！
-
-严格返回如下 JSON 格式（全部使用自然流畅的简体中文）：
+请以纯正的韩国女高生真人身份、结合当前好感关系（${stage}，好感 ${currentFav}）给出极具呼吸感与情绪波动的日常口语回答。
+必须严格返回如下 JSON 格式（全部使用自然流畅的简体中文，绝不出现任何AI腔调）：
 {
-  "reply": "角色极具个性的自然口语回答（30-85字，紧扣李秀妍刚才说的话，体现性格和口吻，绝不敷衍）",
-  "innerThought": "角色此时此刻真实隐秘的内心OS（15-40字，符合好感度与心动值）",
-  "actionDesc": "具有韩漫画面的眼神、微表情或动作描写（15-35字）",
-  "newMemory": "若本次对话聊到了新约定/秘密/心事则总结成简短一句话，否则填 \"\"",
-  "extractedKeywords": ["提炼1-2个记忆关键词标签"],
+  "reply": "极具真人感、充满呼吸感与情绪波动的日常口语台词（30-85字，像真人在KakaoTalk或课间跟你面对面聊天，带语气助词和真情实感，绝对不要假大空）",
+  "innerThought": "角色此时此刻真实、细腻、甚至有点小心思的私密内心OS（15-40字）",
+  "actionDesc": "生动传神、充满韩漫画面感的微动作、眼神或神态描写（15-35字）",
+  "newMemory": "若聊到重要约定或心事则总结成一句话，否则填 \"\"",
+  "extractedKeywords": ["1-2个记忆标签"],
   "favorabilityDelta": 5,
   "moodDelta": 5,
   "socialDelta": 3,
   "suggestedReplies": [
-    "顺着话题继续探讨的自然回复1",
-    "展现闺蜜/心动默契的调侃回复2",
-    "引申至放学约会/校园日常的回复3"
+    "自然口语回复1",
+    "随性调侃回复2",
+    "甜蜜互动回复3"
   ]
 }`;
 
@@ -1304,6 +1305,45 @@ ${contextInfo}
       res.json({ success: true, ...(fallbackMap[pathType] || fallbackMap.idol) });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || '生成人生剧情失败' });
+    }
+  });
+
+  // Fetch models from custom OpenAI-compatible API endpoint
+  app.post('/api/ai/models', async (req, res) => {
+    try {
+      const { baseUrl, apiKey } = req.body;
+      if (!baseUrl || !apiKey) {
+        return res.status(400).json({ error: '请先填写 API Base URL 和 API Key' });
+      }
+      const cleanBaseUrl = String(baseUrl).replace(/\/+$/, '');
+      const targetUrl = cleanBaseUrl.endsWith('/v1') ? `${cleanBaseUrl}/models` : `${cleanBaseUrl}/v1/models`;
+
+      const response = await fetch(targetUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        return res.status(response.status).json({ error: `拉取模型失败 (${response.status}): ${errText.slice(0, 100)}` });
+      }
+
+      const data = await response.json();
+      let models: string[] = [];
+      if (Array.isArray(data)) {
+        models = data.map((m: any) => m.id || m.name || String(m));
+      } else if (Array.isArray(data?.data)) {
+        models = data.data.map((m: any) => m.id || m.name || String(m));
+      } else if (Array.isArray(data?.models)) {
+        models = data.models.map((m: any) => m.id || m.name || String(m));
+      }
+
+      res.json({ models });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || '拉取模型出错' });
     }
   });
 

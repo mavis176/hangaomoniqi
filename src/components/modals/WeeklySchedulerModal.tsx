@@ -69,15 +69,15 @@ export const WeeklySchedulerModal: React.FC<WeeklySchedulerModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs">
       <div className="bg-[#f5f2eb] border-2 border-[#dcd5c7] rounded-2xl max-w-3xl w-full max-h-[94dvh] flex flex-col overflow-hidden shadow-2xl text-[#2b2620]">
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#57534b] to-[#6e695f] px-4 py-3 flex items-center justify-between text-white border-b border-[#9c9589]">
+        <div className="bg-gradient-to-r from-[#57534b] to-[#6e695f] px-3 py-2 sm:px-4 sm:py-3 flex items-center justify-between text-white border-b border-[#9c9589]">
           <div className="flex items-center gap-2">
-            <CalendarClock className="w-5 h-5 text-[#f5d68e]" />
+            <CalendarClock className="w-4 h-4 sm:w-5 sm:h-5 text-[#f5d68e] shrink-0" />
             <div>
-              <h2 className="text-base sm:text-lg font-bold leading-tight">
-                每周行动回合安排 · {weekInfo.calendarYear}年{weekInfo.month}月 (高{gradeYear}第{weekInYear}/36周)
+              <h2 className="text-xs sm:text-base font-bold leading-tight">
+                每周行动排程 · 高{gradeYear}第{weekInYear}/36周
               </h2>
-              <p className="text-[11px] text-[#e6dfd5]">
-                {weekInfo.seasonName} · 每周自动发放零花钱 ₩{stats.allowance.toLocaleString()} · 题库已收录 {TOTAL_EVENT_VARIATIONS_COUNT}+ 剧情事件
+              <p className="text-[10px] text-[#e6dfd5] hidden sm:block">
+                {weekInfo.calendarYear}年{weekInfo.month}月 · 每周零花钱 ₩{stats.allowance.toLocaleString()}
               </p>
             </div>
           </div>
@@ -85,7 +85,7 @@ export const WeeklySchedulerModal: React.FC<WeeklySchedulerModalProps> = ({
             onClick={onClose}
             className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 

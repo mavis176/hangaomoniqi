@@ -44,15 +44,15 @@ export const EndingsModal: React.FC<EndingsModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/65 backdrop-blur-xs">
       <div className="bg-[#f5f2eb] border-2 border-[#dcd5c7] rounded-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden shadow-2xl text-[#2b2620]">
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#4a4338] to-[#695e4e] px-4 py-3 flex items-center justify-between text-white border-b border-[#9c9589]">
+        <div className="bg-gradient-to-r from-[#4a4338] to-[#695e4e] px-3 py-2 sm:px-4 sm:py-2.5 flex items-center justify-between text-white border-b border-[#9c9589] shrink-0">
           <div className="flex items-center gap-2">
-            <Award className="w-5 h-5 text-[#f5d68e]" />
+            <Award className="w-4 h-4 sm:w-5 sm:h-5 text-[#f5d68e] shrink-0" />
             <div>
-              <h2 className="text-base sm:text-lg font-bold">
-                首尔女子高中 · 13大结局收集图鉴与毕业结算 ({unlockedEndingIds.length}/13)
+              <h2 className="text-xs sm:text-base font-bold">
+                毕业图鉴与结局结算 ({unlockedEndingIds.length}/13)
               </h2>
-              <p className="text-[11px] text-[#e6dfd5]">
-                当前进度：高{gradeYear} 第{weekInYear}周 · 可随时预览结算当前属性达成的结局，已解锁结局永久保存在本地
+              <p className="text-[10px] text-[#e6dfd5] hidden sm:block">
+                当前：高{gradeYear}第{weekInYear}周 · 预览或触发结局结算
               </p>
             </div>
           </div>
@@ -60,7 +60,7 @@ export const EndingsModal: React.FC<EndingsModalProps> = ({
             onClick={onClose}
             className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 

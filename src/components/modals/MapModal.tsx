@@ -79,22 +79,22 @@ export const MapModal: React.FC<MapModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/65 backdrop-blur-xs select-none">
       <div className="bg-[#f5f1e8] border-2 border-[#d9d0be] rounded-2xl max-w-5xl w-full h-[92vh] max-h-[850px] flex flex-col overflow-hidden shadow-2xl text-[#2b251e]">
         {/* Top Header */}
-        <div className="bg-gradient-to-r from-[#44382c] via-[#5c4c3b] to-[#73604b] px-4 py-3 flex items-center justify-between text-white border-b border-[#8c7865] shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-400/20 border border-amber-300/40 flex items-center justify-center text-amber-200">
-              <Compass className="w-5 h-5 animate-spin-slow" />
+        <div className="bg-gradient-to-r from-[#44382c] via-[#5c4c3b] to-[#73604b] px-3 py-2 sm:px-4 sm:py-3 flex items-center justify-between text-white border-b border-[#8c7865] shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-400/20 border border-amber-300/40 flex items-center justify-center text-amber-200 shrink-0">
+              <Compass className="w-4 h-4 sm:w-5 sm:h-5 animate-spin-slow" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-black tracking-wide">
-                  首尔女高 · 校园与都市漫游地图
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h2 className="text-xs sm:text-base font-black tracking-wide">
+                  首尔女高 · 漫游地图
                 </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400/20 border border-amber-300/40 text-amber-200">
-                  12大探索地点 · 40+专属互动事件
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-400/20 border border-amber-300/40 text-amber-200 hidden sm:inline-block">
+                  12大地标
                 </span>
               </div>
-              <p className="text-[11px] text-[#e0d6cb]">
-                每个区域具备独特行动活动、常驻同学羁绊与沉浸式场景 · 点击即可前往或设为主界面背景
+              <p className="text-[10px] text-[#e0d6cb] hidden sm:block">
+                点击地点前往探索专属互动与NPC羁绊
               </p>
             </div>
           </div>
@@ -102,17 +102,17 @@ export const MapModal: React.FC<MapModalProps> = ({
             {onOpenPortraitModal && (
               <button
                 onClick={() => onOpenPortraitModal()}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f0e4cf]/20 hover:bg-[#f0e4cf]/30 border border-amber-200/40 text-xs font-bold text-amber-100 transition-all cursor-pointer"
+                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#f0e4cf]/20 hover:bg-[#f0e4cf]/30 border border-amber-200/40 text-[11px] font-bold text-amber-100 transition-all cursor-pointer"
                 title="打开NPC更换立绘工坊"
               >
-                <span>🎭 更换NPC立绘</span>
+                <span>🎭 立绘工坊</span>
               </button>
             )}
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
         </div>
