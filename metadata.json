@@ -1,0 +1,6 @@
+{
+  "name": "韩国女高模拟器",
+  "description": "首尔女子高中高一学生模拟校园生活网页游戏",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
