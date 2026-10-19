@@ -8,7 +8,8 @@ interface TimetableModalProps {
   stats: GameStats;
   currentDay: number;
   clockMinutes: number;
-  onAttendClass: (subject: string, durationMins: number) => void;
+  weeklyCompletedActions?: string[];
+  onAttendClass: (subject: string, durationMins: number, actionKey: string) => void;
 }
 
 export const TimetableModal: React.FC<TimetableModalProps> = ({
@@ -16,6 +17,7 @@ export const TimetableModal: React.FC<TimetableModalProps> = ({
   stats,
   currentDay,
   clockMinutes,
+  weeklyCompletedActions = [],
   onAttendClass,
 }) => {
   const cal = getCalendarDateString(currentDay, clockMinutes);
@@ -24,19 +26,21 @@ export const TimetableModal: React.FC<TimetableModalProps> = ({
 
   const courses = WEEKLY_TIMETABLE[selectedWeekday] || WEEKLY_TIMETABLE[0];
   const isTodaySelected = selectedWeekday === cal.weekdayIndex;
+  const isTutoringDone = weeklyCompletedActions.includes('weekly_study_tutoring');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-xs p-3 sm:p-4">
       <div className="bg-[#ece6db] border-2 border-[#f7f4ee] rounded-2xl w-full max-w-2xl max-h-[88vh] flex flex-col shadow-[0_12px_40px_rgba(0,0,0,0.45)] overflow-hidden text-[#2b2620]">
-        
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 bg-gradient-to-r from-[#6b6356] to-[#857b6b] text-white border-b border-[#b5ab99]">
           <div className="flex items-center gap-2.5">
             <Calendar className="w-5 h-5 text-[#f0e6d2]" />
             <div>
-              <h2 className="text-base sm:text-lg font-bold tracking-wide">首尔女子高中高一(1)班 · 周课程表</h2>
+              <h2 className="text-base sm:text-lg font-bold tracking-wide">
+                首尔女子高中高一(1)班 · 周课程表
+              </h2>
               <p className="text-[11px] text-[#e6dfd3]">
-                当前时间：{cal.fullLabel} {cal.weekdayIndex >= 5 ? '(周末休业日)' : ''}
+                当前时间：{cal.fullLabel} {cal.weekdayIndex >= 5 ? '(周末休业日)' : ''} · 点击课程触发AI课堂动态事件与抉择
               </p>
             </div>
           </div>
@@ -75,9 +79,13 @@ export const TimetableModal: React.FC<TimetableModalProps> = ({
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
           {courses.map((item) => {
-            const isPast = isTodaySelected && clockMinutes >= item.endMinutes;
+            const actionKey = `weekly_class_${selectedWeekday}_${item.periodNumber}`;
+            const isCourseDone =
+              weeklyCompletedActions.includes(actionKey) || isTutoringDone;
             const isOngoing =
-              isTodaySelected && clockMinutes >= item.startMinutes - 15 && clockMinutes < item.endMinutes;
+              isTodaySelected &&
+              clockMinutes >= item.startMinutes - 15 &&
+              clockMinutes < item.endMinutes;
 
             return (
               <div
@@ -88,8 +96,12 @@ export const TimetableModal: React.FC<TimetableModalProps> = ({
               >
                 <div className="flex items-center gap-3">
                   <div className="w-20 text-center bg-[#ece6db] border border-[#d6cfc2] rounded-lg py-1.5 px-1.5">
-                    <span className="text-xs font-bold text-[#4a4237] block">第{item.periodNumber}节</span>
-                    <span className="text-[10px] text-[#7a7164] tabular-nums">{item.timeLabel}</span>
+                    <span className="text-xs font-bold text-[#4a4237] block">
+                      第{item.periodNumber}节
+                    </span>
+                    <span className="text-[10px] text-[#7a7164] tabular-nums">
+                      {item.timeLabel}
+                    </span>
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
@@ -107,22 +119,30 @@ export const TimetableModal: React.FC<TimetableModalProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  {isPast ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-bold text-[#4e7a56] bg-[#e3efe5] border border-[#b7d4bc] px-2.5 py-1 rounded-lg">
-                      <Check className="w-3.5 h-3.5" /> 已下课
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        onAttendClass(item.subject, 50);
-                        onClose();
-                      }}
-                      className="px-3 py-1.5 bg-gradient-to-b from-[#dfd3b8] to-[#c7b693] hover:from-[#eae0c8] hover:to-[#d2c2a0] border border-[#efe7d6] rounded-lg text-xs font-bold text-[#383020] flex items-center gap-1 shadow-2xs cursor-pointer"
-                    >
-                      <BookOpen className="w-3.5 h-3.5" />
-                      <span>{isOngoing ? '立即听课 (+50分)' : '提前预习 (+30分)'}</span>
-                    </button>
-                  )}
+                  <button
+                    disabled={isCourseDone}
+                    onClick={() => {
+                      if (isCourseDone) return;
+                      onAttendClass(item.subject, 50, actionKey);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs transition-all ${
+                      isCourseDone
+                        ? 'bg-stone-300 border border-stone-400 text-stone-600 cursor-not-allowed'
+                        : 'bg-gradient-to-b from-[#dfd3b8] to-[#c7b693] hover:from-[#eae0c8] hover:to-[#d2c2a0] border border-[#efe7d6] text-[#383020] cursor-pointer'
+                    }`}
+                  >
+                    {isCourseDone ? (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>本周已完成（下周重置）</span>
+                      </>
+                    ) : (
+                      <>
+                        <BookOpen className="w-3.5 h-3.5" />
+                        <span>{isOngoing ? '立即听课 (触发课堂事件)' : '专修预习 (触发课堂事件)'}</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
             );
@@ -132,7 +152,9 @@ export const TimetableModal: React.FC<TimetableModalProps> = ({
           <div className="bg-[#ece6db] border border-[#cfc8ba] rounded-xl p-3 flex items-center justify-between text-xs text-[#5a5246]">
             <div className="flex items-center gap-2 font-bold">
               <Clock className="w-4 h-4 text-[#7d6338]" />
-              <span>12:00 - 13:00 学生食堂午餐与午休 · 18:30 - 21:00 夜间自主晚自习 (야자)</span>
+              <span>
+                12:00 - 13:00 学生食堂午餐与午休 · 18:30 - 21:00 夜间自主晚自习 (야자)
+              </span>
             </div>
           </div>
         </div>
@@ -146,7 +168,6 @@ export const TimetableModal: React.FC<TimetableModalProps> = ({
             确定
           </button>
         </div>
-
       </div>
     </div>
   );

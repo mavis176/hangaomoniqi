@@ -60,6 +60,7 @@ export const LifePathModal: React.FC<LifePathModalProps> = ({
 }) => {
   // Current view or active life path
   const [selectedTab, setSelectedTab] = useState<LifePathType | 'overview'>('overview');
+  const [lockedModalTitle, setLockedModalTitle] = useState<string | null>(null);
 
   // Path States
   const [idolState, setIdolState] = useState<IdolCareerState>(() => {
@@ -547,26 +548,18 @@ export const LifePathModal: React.FC<LifePathModalProps> = ({
               <span>{stats.isDebutedIdol ? '🌟 K-Pop 顶流爱豆生涯' : '🔒 爱豆篇 (需高中出道)'}</span>
             </button>
             <button
-              onClick={() => setSelectedTab('university')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                selectedTab === 'university'
-                  ? 'bg-gradient-to-r from-blue-700 to-indigo-800 text-white shadow-md'
-                  : 'bg-white/70 hover:bg-white text-blue-900 border border-blue-200'
-              }`}
+              onClick={() => setLockedModalTitle('名牌大学毕业工作模拟器')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap bg-stone-100/90 text-stone-600 border border-stone-300 hover:bg-stone-200`}
             >
-              <GraduationCap className="w-3.5 h-3.5 text-blue-300" />
-              <span>🎓 SKY 名门大学与精英人生</span>
+              <GraduationCap className="w-3.5 h-3.5 text-blue-500" />
+              <span>🎓 名牌大学 (🔒 筹备开发中)</span>
             </button>
             <button
-              onClick={() => setSelectedTab('chaebol')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                selectedTab === 'chaebol'
-                  ? 'bg-gradient-to-r from-amber-700 to-yellow-600 text-white shadow-md'
-                  : 'bg-white/70 hover:bg-white text-amber-900 border border-amber-200'
-              }`}
+              onClick={() => setLockedModalTitle('财阀太太模拟器')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap bg-stone-100/90 text-stone-600 border border-stone-300 hover:bg-stone-200`}
             >
-              <Gem className="w-3.5 h-3.5 text-amber-300" />
-              <span>💍 财阀太太奢华模拟器</span>
+              <Gem className="w-3.5 h-3.5 text-amber-500" />
+              <span>💍 财阀太太 (🔒 筹备开发中)</span>
             </button>
           </div>
 
@@ -698,13 +691,19 @@ export const LifePathModal: React.FC<LifePathModalProps> = ({
                   </div>
 
                   {/* Card 2: University & Career */}
-                  <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-white border-2 border-blue-200 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md transition-all">
+                  <div className="bg-gradient-to-br from-blue-50/80 via-indigo-50/80 to-white border-2 border-blue-200/80 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md transition-all relative overflow-hidden">
                     <div className="space-y-2">
-                      <div className="w-10 h-10 rounded-xl bg-blue-700 text-white flex items-center justify-center text-lg font-bold shadow-sm">
-                        🎓
+                      <div className="flex items-center justify-between">
+                        <div className="w-10 h-10 rounded-xl bg-blue-700 text-white flex items-center justify-center text-lg font-bold shadow-sm">
+                          🎓
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-stone-950 flex items-center gap-1 shadow-2xs">
+                          <Lock className="w-2.5 h-2.5 stroke-[3]" />
+                          <span>🔒 筹备开发中 · 敬请期待</span>
+                        </span>
                       </div>
                       <h4 className="text-base font-black text-blue-950">
-                        SKY 名门大学与精英人生
+                        名牌大学毕业工作模拟器
                       </h4>
                       <p className="text-xs text-blue-800 leading-relaxed">
                         考入首尔大学法学院！经历热血校园MT与GPA考核，毕业后就职首尔地检首席检察官或顶级律所合伙人，步入婚姻生子养娃，事业家庭双丰收。
@@ -714,22 +713,28 @@ export const LifePathModal: React.FC<LifePathModalProps> = ({
                       </div>
                     </div>
                     <button
-                      onClick={() => setSelectedTab('university')}
-                      className="mt-4 w-full py-2 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                      onClick={() => setLockedModalTitle('名牌大学毕业工作模拟器')}
+                      className="mt-4 w-full py-2 bg-gradient-to-r from-blue-700 to-indigo-800 hover:from-blue-800 hover:to-indigo-900 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
                     >
-                      <span>进入大学与职场篇</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>查看支线预告 (🔒 筹备中)</span>
                     </button>
                   </div>
 
                   {/* Card 3: Chaebol Wife */}
-                  <div className="bg-gradient-to-br from-amber-50 via-orange-50 to-white border-2 border-amber-200 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md transition-all">
+                  <div className="bg-gradient-to-br from-amber-50/80 via-orange-50/80 to-white border-2 border-amber-200/80 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md transition-all relative overflow-hidden">
                     <div className="space-y-2">
-                      <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center text-lg font-bold shadow-sm">
-                        💍
+                      <div className="flex items-center justify-between">
+                        <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center text-lg font-bold shadow-sm">
+                          💍
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-stone-950 flex items-center gap-1 shadow-2xs">
+                          <Lock className="w-2.5 h-2.5 stroke-[3]" />
+                          <span>🔒 筹备开发中 · 敬请期待</span>
+                        </span>
                       </div>
                       <h4 className="text-base font-black text-amber-950">
-                        财阀太太奢华模拟器
+                        财阀太太模拟器
                       </h4>
                       <p className="text-xs text-amber-800 leading-relaxed">
                         嫁入顶级财阀家族！清潭洞顶级院长抗衰水光、高定爱马仕沙龙、大峙洞殿堂级私塾名师养娃育儿，主办汉南洞名媛慈善晚宴，执掌家族大权。
@@ -739,11 +744,11 @@ export const LifePathModal: React.FC<LifePathModalProps> = ({
                       </div>
                     </div>
                     <button
-                      onClick={() => setSelectedTab('chaebol')}
+                      onClick={() => setLockedModalTitle('财阀太太模拟器')}
                       className="mt-4 w-full py-2 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
                     >
-                      <span>进入财阀贵妇篇</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>查看支线预告 (🔒 筹备中)</span>
                     </button>
                   </div>
                 </div>
@@ -1416,6 +1421,34 @@ export const LifePathModal: React.FC<LifePathModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Lock Preview Notification Modal Popup */}
+      {lockedModalTitle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-[#fcf9f2] border-2 border-[#e2d5bd] rounded-3xl max-w-md w-full p-6 text-center shadow-2xl space-y-4 animate-in zoom-in-95 duration-200 text-[#383025]">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-amber-400 to-rose-400 flex items-center justify-center text-stone-900 shadow-md">
+              <Lock className="w-7 h-7 stroke-[2.5]" />
+            </div>
+            <div className="space-y-2">
+              <div className="inline-block px-3 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300">
+                🔒 筹备开发中 · 敬请期待
+              </div>
+              <h3 className="text-base sm:text-lg font-black tracking-wide text-stone-900">
+                【{lockedModalTitle}】
+              </h3>
+              <p className="text-xs sm:text-sm text-stone-600 leading-relaxed font-medium">
+                ✨ 豪门名流与职场精英支线正在加急制作中！当前版本请先沉浸体验首尔女高、练习生出道及 Bubble 互动，敬请期待后续更新！
+              </p>
+            </div>
+            <button
+              onClick={() => setLockedModalTitle(null)}
+              className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-white font-black text-sm shadow-md cursor-pointer transition-all"
+            >
+              我知道了，继续体验主线
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

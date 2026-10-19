@@ -537,33 +537,52 @@ export function pickWeeklyEvent(params: {
   stats: GameStats;
   npcs: NPCClassmate[];
   preferredCategory?: EventCategory;
+  triggeredEventHistory?: string[];
 }): RandomEvent {
-  const { year, week, season, stats, npcs, preferredCategory } = params;
+  const { year, week, season, npcs, preferredCategory, triggeredEventHistory = [] } = params;
+  const historySet = new Set(triggeredEventHistory);
 
-  // 1. Check if there is a seasonal highlight event matching current season
-  if (!preferredCategory && Math.random() < 0.42) {
-    const seasonalMatches = CURATED_STORY_EVENTS.filter((e) => e.seasonTag === season);
-    if (seasonalMatches.length > 0) {
+  const isNotTriggered = (ev: { id?: string; title: string }) => {
+    if (ev.id && historySet.has(ev.id)) return false;
+    if (historySet.has(ev.title)) return false;
+    return !triggeredEventHistory.some((h) => h.includes(ev.title) || (ev.id && h.includes(ev.id)));
+  };
+
+  // 1. Check if there is an untriggered seasonal highlight event matching current season
+  if (!preferredCategory) {
+    const seasonalMatches = CURATED_STORY_EVENTS.filter(
+      (e) => e.seasonTag === season && isNotTriggered(e)
+    );
+    if (seasonalMatches.length > 0 && Math.random() < 0.5) {
       return seasonalMatches[Math.floor(Math.random() * seasonalMatches.length)];
     }
   }
 
-  // 2. Check curated pool matching preferredCategory or random 45% chance
-  const matchingCurated = preferredCategory
-    ? CURATED_STORY_EVENTS.filter((e) => e.category === preferredCategory)
-    : CURATED_STORY_EVENTS;
+  // 2. Check untriggered curated pool matching preferredCategory
+  const matchingCurated = (
+    preferredCategory
+      ? CURATED_STORY_EVENTS.filter((e) => e.category === preferredCategory)
+      : CURATED_STORY_EVENTS
+  ).filter(isNotTriggered);
 
-  if (matchingCurated.length > 0 && Math.random() < 0.5) {
+  if (matchingCurated.length > 0) {
     return matchingCurated[Math.floor(Math.random() * matchingCurated.length)];
   }
 
-  // 3. Generate a rich combinatorial event from the 212+ procedural matrix
+  // 3. Generate a non-repeating combinatorial event from the procedural matrix, filtering out used titles
   const templatePool = preferredCategory
     ? PROCEDURAL_TEMPLATES.filter((t) => t.category === preferredCategory)
     : PROCEDURAL_TEMPLATES;
   const tpl = templatePool[Math.floor(Math.random() * templatePool.length)] || PROCEDURAL_TEMPLATES[0];
 
-  const title = tpl.titles[(year * 37 + week * 13 + Math.floor(Math.random() * tpl.titles.length)) % tpl.titles.length];
+  const availableTitles = tpl.titles.filter(
+    (t) => !historySet.has(t) && !triggeredEventHistory.some((h) => h.includes(t))
+  );
+  const chosenTitlePool = availableTitles.length > 0 ? availableTitles : tpl.titles;
+  const title =
+    chosenTitlePool[Math.floor(Math.random() * chosenTitlePool.length)] ||
+    `${tpl.titles[0]} · 第${week}周`;
+
   const loc = tpl.locations[Math.floor(Math.random() * tpl.locations.length)];
   const sit = tpl.situations[Math.floor(Math.random() * tpl.situations.length)];
   const targetNpc = npcs[Math.floor(Math.random() * npcs.length)] || npcs[0];
@@ -604,3 +623,4 @@ export function pickWeeklyEvent(params: {
     ],
   };
 }
+

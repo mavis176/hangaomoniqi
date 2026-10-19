@@ -30,6 +30,7 @@ export const EndingsModal: React.FC<EndingsModalProps> = ({
     ending: GameEnding;
     loverNpc?: NPCClassmate;
   } | null>(null);
+  const [lockedTeaserTitle, setLockedTeaserTitle] = useState<string | null>(null);
 
   const handleSettleGraduation = (forceTransfer?: boolean) => {
     const res = evaluateGameEnding(stats, npcs, forceTransfer);
@@ -147,24 +148,34 @@ export const EndingsModal: React.FC<EndingsModalProps> = ({
                     </div>
                   </button>
                   <button
-                    onClick={() => {
-                      onClose();
-                      if (onOpenLifePath) onOpenLifePath('university');
-                    }}
-                    className="p-2.5 bg-gradient-to-r from-blue-800 to-indigo-800 hover:from-blue-900 hover:to-indigo-900 rounded-xl text-left text-white shadow-sm cursor-pointer"
+                    onClick={() => setLockedTeaserTitle('名牌大学毕业工作模拟器')}
+                    className="p-2.5 bg-gradient-to-r from-blue-900/80 to-indigo-900/80 border border-blue-400/40 hover:border-blue-300 rounded-xl text-left text-white shadow-sm cursor-pointer relative group"
                   >
-                    <div className="text-xs font-bold">🎓 开启【名门大学与精英职场】</div>
-                    <div className="text-[10px] text-blue-200 mt-0.5">首尔大学、检察官/教授、结婚生子养娃</div>
+                    <div className="text-xs font-bold flex items-center justify-between gap-1">
+                      <span>🎓 开启【名牌大学毕业工作模拟器】</span>
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-400 text-stone-950 flex items-center gap-0.5 shrink-0">
+                        <Lock className="w-2.5 h-2.5" />
+                        <span>筹备开发中</span>
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-blue-200/80 mt-0.5">
+                      🔒 豪门名流与职场精英支线加急制作中，敬请期待！
+                    </div>
                   </button>
                   <button
-                    onClick={() => {
-                      onClose();
-                      if (onOpenLifePath) onOpenLifePath('chaebol');
-                    }}
-                    className="p-2.5 bg-gradient-to-r from-amber-800 to-yellow-700 hover:from-amber-900 hover:to-yellow-800 rounded-xl text-left text-white shadow-sm cursor-pointer"
+                    onClick={() => setLockedTeaserTitle('财阀太太模拟器')}
+                    className="p-2.5 bg-gradient-to-r from-amber-900/80 to-yellow-900/80 border border-amber-400/40 hover:border-amber-300 rounded-xl text-left text-white shadow-sm cursor-pointer relative group"
                   >
-                    <div className="text-xs font-bold">💍 开启【财阀太太奢华模拟】</div>
-                    <div className="text-[10px] text-amber-200 mt-0.5">清潭洞护肤水光、名媛慈善晚宴、大峙洞育儿</div>
+                    <div className="text-xs font-bold flex items-center justify-between gap-1">
+                      <span>💍 开启【财阀太太模拟器】</span>
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-400 text-stone-950 flex items-center gap-0.5 shrink-0">
+                        <Lock className="w-2.5 h-2.5" />
+                        <span>筹备开发中</span>
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-amber-200/80 mt-0.5">
+                      🔒 豪门名流与职场精英支线加急制作中，敬请期待！
+                    </div>
                   </button>
                 </div>
               </div>
@@ -328,6 +339,34 @@ export const EndingsModal: React.FC<EndingsModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Lock Preview Notification Modal Popup */}
+      {lockedTeaserTitle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-[#fcf9f2] border-2 border-[#e2d5bd] rounded-3xl max-w-md w-full p-6 text-center shadow-2xl space-y-4 animate-in zoom-in-95 duration-200 text-[#383025]">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-amber-400 to-rose-400 flex items-center justify-center text-stone-900 shadow-md">
+              <Lock className="w-7 h-7 stroke-[2.5]" />
+            </div>
+            <div className="space-y-2">
+              <div className="inline-block px-3 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300">
+                🔒 筹备开发中 · 敬请期待
+              </div>
+              <h3 className="text-base sm:text-lg font-black tracking-wide text-stone-900">
+                【{lockedTeaserTitle}】
+              </h3>
+              <p className="text-xs sm:text-sm text-stone-600 leading-relaxed font-medium">
+                ✨ 豪门名流与职场精英支线正在加急制作中！当前版本请先沉浸体验首尔女高、练习生出道及 Bubble 互动，敬请期待后续更新！
+              </p>
+            </div>
+            <button
+              onClick={() => setLockedTeaserTitle(null)}
+              className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-white font-black text-sm shadow-md cursor-pointer transition-all"
+            >
+              我知道了，继续体验主线
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -44,6 +44,7 @@ import {
 import {
   generateTraineeSurvivalMission,
   generateDynamicNarrative,
+  ActionEventCategory,
 } from '../../services/aiService';
 import { defaultAIConfig } from '../../data/gameData';
 
@@ -54,6 +55,16 @@ interface TraineeModalProps {
   timeContext?: string;
   lastJobTurnKey?: string;
   currentTurnKey?: string;
+  weeklyCompletedActions?: string[];
+  onMarkWeeklyActionDone?: (key: string) => void;
+  onTriggerActionEvent?: (params: {
+    actionCategory: ActionEventCategory;
+    actionName: string;
+    locationName: string;
+    baseStaminaCost: number;
+    weeklyActionKey: string;
+    extraContext?: string;
+  }) => void;
   onRecordJobDone?: () => void;
   onUpdateStats: (newStats: Partial<GameStats>) => void;
   onNotify: (msg: string) => void;
@@ -401,12 +412,18 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
   timeContext = '2025年春季学期',
   lastJobTurnKey,
   currentTurnKey,
+  weeklyCompletedActions = [],
+  onMarkWeeklyActionDone,
+  onTriggerActionEvent,
   onRecordJobDone,
   onUpdateStats,
   onNotify,
 }) => {
   const isAlreadyWorkedToday =
-    Boolean(lastJobTurnKey) && Boolean(currentTurnKey) && lastJobTurnKey === currentTurnKey;
+    (Boolean(lastJobTurnKey) && Boolean(currentTurnKey) && lastJobTurnKey === currentTurnKey) ||
+    weeklyCompletedActions.includes('weekly_parttime_or_endorsement');
+  const isWeeklyMentorTrainingDone = weeklyCompletedActions.includes('weekly_trainee_mentor_training');
+  const isWeeklyEvalDone = weeklyCompletedActions.includes('weekly_trainee_eval');
 
   const [activeTab, setActiveTab] = useState<
     'survival_test' | 'survival_ai' | 'post_debut' | 'monthly_eval' | 'training'
@@ -653,12 +670,20 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
         mentorSummary: `【考核暂缓】终审得分 ${finalScore} 分，虽有遗憾但实力进一步精进，继续冲刺！`,
       });
 
+      onMarkWeeklyActionDone?.('weekly_trainee_eval');
       onNotify('⚠️ 出道终审暂未通过，扣除 20 点体力。请继续在练习室磨炼！');
+    }
+    if (passed) {
+      onMarkWeeklyActionDone?.('weekly_trainee_eval');
     }
   };
 
   // Generate AI Random Monthly Survival Test Theme (刀群舞 / 创作竞赛 / 个人Live / 概念直拍)
   const handleGenerateSurvivalTest = async (forceRandom = true, themeIdOverride?: SurvivalTestThemeConfig['id']) => {
+    if (isWeeklyEvalDone) {
+      onNotify('本周已完成练习生评级考核，请等待下周重置！');
+      return;
+    }
     if (stats.stamina < 10) {
       onNotify('体力不足 10 点，请先休息补充体力后再参加练习生月度生存测试！');
       return;
@@ -804,6 +829,8 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
       mentorSummary: summary,
     });
 
+    onMarkWeeklyActionDone?.('weekly_trainee_eval');
+
     // Automatically pop up the Penalty / Elimination Edge Sudden Event when rating is low!
     if (isLowGrade) {
       setPenaltyOutcomeText(null);
@@ -855,6 +882,10 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
 
   // Launch AI-Assisted Survival Show Mission (Monthly Eval / Public Stage / Fan Meeting / Debut Combat)
   const handleLaunchAIMission = async (category: TraineeMissionCategory, presetTheme?: string) => {
+    if (isWeeklyEvalDone) {
+      onNotify('本周已完成练习生评级考核，请等待下周重置！');
+      return;
+    }
     const staminaCost = category === 'debut_combat' ? 18 : category === 'public_stage' ? 15 : 12;
     if (stats.stamina < staminaCost) {
       onNotify(`体力不足 ${staminaCost} 点，请先休息补充体力后再参加生存秀任务！`);
@@ -939,6 +970,8 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
       mentorSummary: verdictText,
     });
 
+    onMarkWeeklyActionDone?.('weekly_trainee_eval');
+
     setAiMissionResult({
       finalScore: rawScore,
       evalRank,
@@ -957,11 +990,28 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
     lessonType: 'vocal' | 'dance' | 'rap' | 'camera',
     lessonName: string
   ) => {
+    if (isWeeklyMentorTrainingDone) {
+      onNotify('本周已完成导师特训（下周重置）！');
+      return;
+    }
     if (stats.stamina < 10) {
       onNotify('体力不足 10 点，请先休息补充体力后再来练习室特训！');
       return;
     }
 
+    if (onTriggerActionEvent) {
+      onTriggerActionEvent({
+        actionCategory: 'trainee',
+        actionName: `练习生导师特训：${lessonName}`,
+        locationName: `${agencyDisplayName} · 地下练习室`,
+        baseStaminaCost: 10,
+        weeklyActionKey: 'weekly_trainee_mentor_training',
+        extraContext: `专项特训课目：${lessonName}（主修方向：${lessonType}）`,
+      });
+      return;
+    }
+
+    onMarkWeeklyActionDone?.('weekly_trainee_mentor_training');
     const nextVocal = lessonType === 'vocal' ? Math.min(100, vocal + 6) : vocal;
     const nextDance = lessonType === 'dance' ? Math.min(100, dance + 6) : dance;
     const nextRap = lessonType === 'rap' ? Math.min(100, rap + 6) : rap;
@@ -1008,6 +1058,10 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
 
   // Start 3-Stage Classic Monthly Evaluation / Survival Show
   const handleStartEvaluation = (evStage: TraineeEvaluationStage) => {
+    if (isWeeklyEvalDone) {
+      onNotify('本周已完成练习生评级考核，请等待下周重置！');
+      return;
+    }
     if (stats.stamina < evStage.staminaCost) {
       onNotify(`参加【${evStage.title}】需要至少 ${evStage.staminaCost} 点体力！`);
       return;
@@ -1085,6 +1139,7 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
       });
     }
 
+    onMarkWeeklyActionDone?.('weekly_trainee_eval');
     setEvalStage(3);
   };
 
@@ -1365,12 +1420,20 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
 
                   <button
                     onClick={() => handleGenerateSurvivalTest(true)}
-                    disabled={isGeneratingSurvivalTest}
-                    className="px-4 py-2 bg-gradient-to-r from-amber-400 to-rose-500 hover:from-amber-500 hover:to-rose-600 disabled:opacity-50 text-[#2b101d] hover:text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
+                    disabled={isGeneratingSurvivalTest || isWeeklyEvalDone}
+                    className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md transition-all ${
+                      isWeeklyEvalDone
+                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-amber-400 to-rose-500 hover:from-amber-500 hover:to-rose-600 disabled:opacity-50 text-[#2b101d] hover:text-white cursor-pointer'
+                    }`}
                   >
                     <Dice5 className={`w-4 h-4 ${isGeneratingSurvivalTest ? 'animate-spin' : ''}`} />
                     <span>
-                      {isGeneratingSurvivalTest ? 'AI抽取生存考题中...' : '🎲 AI随机抽取本月考核主题'}
+                      {isWeeklyEvalDone
+                        ? '本周已完成（下周重置）'
+                        : isGeneratingSurvivalTest
+                        ? 'AI抽取生存考题中...'
+                        : '🎲 AI随机抽取本月考核主题'}
                     </span>
                   </button>
                 </div>
@@ -1445,10 +1508,17 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                   <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
                     <button
                       onClick={() => handleGenerateSurvivalTest(true)}
-                      className="px-4 py-2 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm cursor-pointer"
+                      disabled={isWeeklyEvalDone}
+                      className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm ${
+                        isWeeklyEvalDone
+                          ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                          : 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white cursor-pointer'
+                      }`}
                     >
                       <Dice5 className="w-4 h-4" />
-                      <span>立即随机生成本月生存测试考题 (-10体力)</span>
+                      <span>
+                        {isWeeklyEvalDone ? '本周已完成（下周重置）' : '立即随机生成本月生存测试考题 (-10体力)'}
+                      </span>
                     </button>
                     <button
                       onClick={() => {
@@ -1618,11 +1688,21 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                   />
                   <button
                     onClick={() => handleLaunchAIMission('public_stage')}
-                    disabled={isGeneratingMission}
-                    className="px-4 py-2 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 disabled:opacity-50 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0"
+                    disabled={isGeneratingMission || isWeeklyEvalDone}
+                    className={`px-4 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm shrink-0 ${
+                      isWeeklyEvalDone
+                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 disabled:opacity-50 text-white cursor-pointer'
+                    }`}
                   >
                     <Sparkles className={`w-4 h-4 text-amber-200 ${isGeneratingMission ? 'animate-spin' : ''}`} />
-                    <span>{isGeneratingMission ? 'AI导演生成舞台中...' : '✨ AI生成生存秀任务'}</span>
+                    <span>
+                      {isWeeklyEvalDone
+                        ? '本周已完成（下周重置）'
+                        : isGeneratingMission
+                        ? 'AI导演生成舞台中...'
+                        : '✨ AI生成生存秀任务'}
+                    </span>
                   </button>
                 </div>
 
@@ -1674,11 +1754,15 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                   </div>
                   <button
                     onClick={() => handleLaunchAIMission('monthly_eval')}
-                    disabled={isGeneratingMission}
-                    className="mt-3.5 w-full py-2.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                    disabled={isGeneratingMission || isWeeklyEvalDone}
+                    className={`mt-3.5 w-full py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm ${
+                      isWeeklyEvalDone
+                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 disabled:opacity-50 text-white cursor-pointer'
+                    }`}
                   >
                     <Award className="w-4 h-4 text-amber-200" />
-                    <span>进入 AI 月度评测考场 ▶</span>
+                    <span>{isWeeklyEvalDone ? '本周已完成（下周重置）' : '进入 AI 月度评测考场 ▶'}</span>
                   </button>
                 </div>
 
@@ -1708,11 +1792,15 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                   </div>
                   <button
                     onClick={() => handleLaunchAIMission('public_stage')}
-                    disabled={isGeneratingMission}
-                    className="mt-3.5 w-full py-2.5 bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 disabled:opacity-50 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                    disabled={isGeneratingMission || isWeeklyEvalDone}
+                    className={`mt-3.5 w-full py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm ${
+                      isWeeklyEvalDone
+                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 disabled:opacity-50 text-white cursor-pointer'
+                    }`}
                   >
                     <Sparkles className="w-4 h-4 text-amber-200" />
-                    <span>登上 AI 生存秀公演舞台 ▶</span>
+                    <span>{isWeeklyEvalDone ? '本周已完成（下周重置）' : '登上 AI 生存秀公演舞台 ▶'}</span>
                   </button>
                 </div>
 
@@ -1742,11 +1830,15 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                   </div>
                   <button
                     onClick={() => handleLaunchAIMission('fan_meeting')}
-                    disabled={isGeneratingMission}
-                    className="mt-3.5 w-full py-2.5 bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-700 hover:to-purple-700 disabled:opacity-50 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                    disabled={isGeneratingMission || isWeeklyEvalDone}
+                    className={`mt-3.5 w-full py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm ${
+                      isWeeklyEvalDone
+                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-700 hover:to-purple-700 disabled:opacity-50 text-white cursor-pointer'
+                    }`}
                   >
                     <Heart className="w-4 h-4 text-pink-200 fill-pink-200" />
-                    <span>开启 AI 粉丝见面会营业 ▶</span>
+                    <span>{isWeeklyEvalDone ? '本周已完成（下周重置）' : '开启 AI 粉丝见面会营业 ▶'}</span>
                   </button>
                 </div>
 
@@ -1776,11 +1868,15 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                   </div>
                   <button
                     onClick={() => handleLaunchAIMission('debut_combat')}
-                    disabled={isGeneratingMission}
-                    className="mt-3.5 w-full py-2.5 bg-gradient-to-r from-amber-500 via-rose-500 to-pink-600 hover:from-amber-600 hover:to-pink-700 disabled:opacity-50 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+                    disabled={isGeneratingMission || isWeeklyEvalDone}
+                    className={`mt-3.5 w-full py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md ${
+                      isWeeklyEvalDone
+                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-amber-500 via-rose-500 to-pink-600 hover:from-amber-600 hover:to-pink-700 disabled:opacity-50 text-white cursor-pointer'
+                    }`}
                   >
                     <Crown className="w-4 h-4 text-amber-100" />
-                    <span>出战 AI 出道实战 Showcase ▶</span>
+                    <span>{isWeeklyEvalDone ? '本周已完成（下周重置）' : '出战 AI 出道实战 Showcase ▶'}</span>
                   </button>
                 </div>
               </div>
@@ -1819,10 +1915,19 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                       </div>
                       <button
                         onClick={() => handleStartEvaluation(ev)}
-                        className="mt-3 w-full py-2 bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                        disabled={isWeeklyEvalDone}
+                        className={`mt-3 w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm ${
+                          isWeeklyEvalDone
+                            ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white cursor-pointer'
+                        }`}
                       >
                         <Sparkles className="w-3.5 h-3.5 text-amber-200" />
-                        <span>登台参加三阶段考核 (-{ev.staminaCost}体力)</span>
+                        <span>
+                          {isWeeklyEvalDone
+                            ? '本周已完成（下周重置）'
+                            : `登台参加三阶段考核 (-${ev.staminaCost}体力)`}
+                        </span>
                       </button>
                     </div>
                   ))}
@@ -1902,7 +2007,12 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
                   <button
                     onClick={() => handleTraineeLesson('vocal', '高音真假音转换课')}
-                    className="bg-white hover:bg-rose-50/60 border border-pink-200 rounded-xl p-3 text-left transition-all shadow-2xs cursor-pointer group"
+                    disabled={isWeeklyMentorTrainingDone}
+                    className={`border rounded-xl p-3 text-left transition-all shadow-2xs group ${
+                      isWeeklyMentorTrainingDone
+                        ? 'bg-gray-100 border-gray-200 opacity-75 cursor-not-allowed'
+                        : 'bg-white hover:bg-rose-50/60 border-pink-200 cursor-pointer'
+                    }`}
                   >
                     <div className="flex items-center justify-between font-bold text-xs text-rose-950">
                       <span className="flex items-center gap-1">
@@ -1913,14 +2023,19 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                     <p className="text-[11px] text-[#6e6456] mt-1">
                       打磨全开麦稳定的气息与高音，触发录音棚突发事件。
                     </p>
-                    <div className="mt-2 text-[11px] font-bold text-rose-600 group-hover:translate-x-0.5 transition-transform">
-                      开始Vocal特训 ▶
+                    <div className={`mt-2 text-[11px] font-bold ${isWeeklyMentorTrainingDone ? 'text-gray-500' : 'text-rose-600 group-hover:translate-x-0.5 transition-transform'}`}>
+                      {isWeeklyMentorTrainingDone ? '本周已完成（下周重置）' : '开始Vocal特训 ▶'}
                     </div>
                   </button>
 
                   <button
                     onClick={() => handleTraineeLesson('dance', '刀群舞与身体控制课')}
-                    className="bg-white hover:bg-indigo-50/60 border border-pink-200 rounded-xl p-3 text-left transition-all shadow-2xs cursor-pointer group"
+                    disabled={isWeeklyMentorTrainingDone}
+                    className={`border rounded-xl p-3 text-left transition-all shadow-2xs group ${
+                      isWeeklyMentorTrainingDone
+                        ? 'bg-gray-100 border-gray-200 opacity-75 cursor-not-allowed'
+                        : 'bg-white hover:bg-indigo-50/60 border-pink-200 cursor-pointer'
+                    }`}
                   >
                     <div className="flex items-center justify-between font-bold text-xs text-indigo-950">
                       <span className="flex items-center gap-1">
@@ -1931,14 +2046,19 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                     <p className="text-[11px] text-[#6e6456] mt-1">
                       高强度2倍速齐舞与核心控制，触发练习室突发事件。
                     </p>
-                    <div className="mt-2 text-[11px] font-bold text-indigo-600 group-hover:translate-x-0.5 transition-transform">
-                      开始Dance特训 ▶
+                    <div className={`mt-2 text-[11px] font-bold ${isWeeklyMentorTrainingDone ? 'text-gray-500' : 'text-indigo-600 group-hover:translate-x-0.5 transition-transform'}`}>
+                      {isWeeklyMentorTrainingDone ? '本周已完成（下周重置）' : '开始Dance特训 ▶'}
                     </div>
                   </button>
 
                   <button
                     onClick={() => handleTraineeLesson('rap', 'Swag说唱与气场课')}
-                    className="bg-white hover:bg-amber-50/60 border border-pink-200 rounded-xl p-3 text-left transition-all shadow-2xs cursor-pointer group"
+                    disabled={isWeeklyMentorTrainingDone}
+                    className={`border rounded-xl p-3 text-left transition-all shadow-2xs group ${
+                      isWeeklyMentorTrainingDone
+                        ? 'bg-gray-100 border-gray-200 opacity-75 cursor-not-allowed'
+                        : 'bg-white hover:bg-amber-50/60 border-pink-200 cursor-pointer'
+                    }`}
                   >
                     <div className="flex items-center justify-between font-bold text-xs text-amber-950">
                       <span className="flex items-center gap-1">
@@ -1949,14 +2069,19 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                     <p className="text-[11px] text-[#6e6456] mt-1">
                       训练节奏Flow与女王控场气场，触发地下Battle事件。
                     </p>
-                    <div className="mt-2 text-[11px] font-bold text-amber-700 group-hover:translate-x-0.5 transition-transform">
-                      开始Rap特训 ▶
+                    <div className={`mt-2 text-[11px] font-bold ${isWeeklyMentorTrainingDone ? 'text-gray-500' : 'text-amber-700 group-hover:translate-x-0.5 transition-transform'}`}>
+                      {isWeeklyMentorTrainingDone ? '本周已完成（下周重置）' : '开始Rap特训 ▶'}
                     </div>
                   </button>
 
                   <button
                     onClick={() => handleTraineeLesson('camera', '直拍Ending表情管理课')}
-                    className="bg-white hover:bg-fuchsia-50/60 border border-pink-200 rounded-xl p-3 text-left transition-all shadow-2xs cursor-pointer group"
+                    disabled={isWeeklyMentorTrainingDone}
+                    className={`border rounded-xl p-3 text-left transition-all shadow-2xs group ${
+                      isWeeklyMentorTrainingDone
+                        ? 'bg-gray-100 border-gray-200 opacity-75 cursor-not-allowed'
+                        : 'bg-white hover:bg-fuchsia-50/60 border-pink-200 cursor-pointer'
+                    }`}
                   >
                     <div className="flex items-center justify-between font-bold text-xs text-fuchsia-950">
                       <span className="flex items-center gap-1">
@@ -1967,8 +2092,8 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                     <p className="text-[11px] text-[#6e6456] mt-1">
                       练习抓红灯机位与绝美Ending妖精，触发站姐出圈事件。
                     </p>
-                    <div className="mt-2 text-[11px] font-bold text-fuchsia-600 group-hover:translate-x-0.5 transition-transform">
-                      开始镜头特训 ▶
+                    <div className={`mt-2 text-[11px] font-bold ${isWeeklyMentorTrainingDone ? 'text-gray-500' : 'text-fuchsia-600 group-hover:translate-x-0.5 transition-transform'}`}>
+                      {isWeeklyMentorTrainingDone ? '本周已完成（下周重置）' : '开始镜头特训 ▶'}
                     </div>
                   </button>
                 </div>
@@ -2641,7 +2766,7 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                         disabled={isAlreadyWorkedToday}
                         onClick={() => {
                           if (isAlreadyWorkedToday) {
-                            onNotify('今日已完成兼职/代言，请推进日程到下一天！');
+                            onNotify('本周已完成（下周重置）！');
                             return;
                           }
                           if (stats.stamina < 12) {
@@ -2649,6 +2774,18 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                             return;
                           }
                           if (onRecordJobDone) onRecordJobDone();
+                          if (onTriggerActionEvent) {
+                            onTriggerActionEvent({
+                              actionCategory: 'part_time',
+                              actionName: sch.title,
+                              locationName: '首尔演艺通告现场',
+                              baseStaminaCost: 12,
+                              weeklyActionKey: 'weekly_parttime_or_endorsement',
+                              extraContext: `${sch.desc}（${sch.rewardText}）`,
+                            });
+                            return;
+                          }
+                          onMarkWeeklyActionDone?.('weekly_parttime_or_endorsement');
                           onUpdateStats({
                             ...sch.delta,
                             coins: stats.coins + (sch.delta.coins || 0),
@@ -2660,9 +2797,13 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                           });
                           onNotify(`🌟 成功完成顶流艺人通告【${sch.title}】！${sch.rewardText}！`);
                         }}
-                        className="mt-2.5 w-full py-1.5 bg-rose-600 hover:bg-rose-700 disabled:bg-gray-300 disabled:text-gray-600 text-white rounded-lg text-xs font-bold cursor-pointer"
+                        className={`mt-2.5 w-full py-1.5 rounded-lg text-xs font-bold ${
+                          isAlreadyWorkedToday
+                            ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                            : 'bg-rose-600 hover:bg-rose-700 text-white cursor-pointer'
+                        }`}
                       >
-                        {isAlreadyWorkedToday ? '今日已完成该兼职/代言，请推进日程到下一天' : '执行艺人通告日程'}
+                        {isAlreadyWorkedToday ? '本周已完成（下周重置）' : '执行艺人通告日程'}
                       </button>
                     </div>
                   ))}

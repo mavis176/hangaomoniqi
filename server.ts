@@ -12,7 +12,10 @@ import {
 } from './src/data/encounterData';
 import {
   ANTI_AI_STYLE_RULES,
+  NPC_CHAT_LIVING_PERSONA_RULES,
+  splitNpcReplyIntoBubbles,
   sanitizeAntiAIResponse,
+  buildLocalActionInteractiveFallback,
 } from './src/services/aiService';
 
 dotenv.config();
@@ -57,7 +60,7 @@ function handleGenAIError(err: any) {
  */
 async function callLiveOpenAICompatibleLLM(systemPrompt: string, userPrompt: string): Promise<any | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 9500);
+  const timer = setTimeout(() => controller.abort(), 18000);
   try {
     const res = await fetch('https://text.pollinations.ai/openai', {
       method: 'POST',
@@ -137,7 +140,7 @@ const CHARACTER_PERSONAS: Record<string, string> = {
 - 说话方式：礼貌克制、略带禁欲感，但每次被秀妍调侃或靠近时都会紧张地推眼镜、耳尖泛红。`,
 };
 
-// Rich, multi-topic, non-repetitive contextual fallback generator if both Gemini and Pollinations time out
+// Rich, multi-topic, non-repetitive short-bubble fallback generator if both Gemini and Pollinations time out
 function buildContextualChatFallback(params: {
   npc: any;
   userMessage: string;
@@ -146,14 +149,12 @@ function buildContextualChatFallback(params: {
   stats: any;
   memories: string[];
 }) {
-  const { npc, userMessage, location, timeContext } = params;
+  const { npc, userMessage, location } = params;
   const msg = (userMessage || '').trim();
   const id = npc?.id || 'npc_1';
   const fav = npc?.favorability ?? 60;
-  const stage = npc?.relationshipStage || '朋友';
 
   const isStudyTopic = /数学|考试|模拟考|复习|学习|题|成绩|英语|历史|课|作业|补习|大峙洞|笔记|高考|CSAT|卷子/.test(msg);
-  const isFoodTopic = /吃|食堂|年糕|面包|小卖部|牛奶|咖啡|冰美式|饿|午饭|零食|麦茶|奶茶|炸鸡|草莓/.test(msg);
   const isIdolTopic = /练习生|出道|舞台|跳舞|唱歌|爱豆|K-Pop|打歌|直拍|选秀|月度|考核|C位|专辑|粉丝/.test(msg);
   const isLoveTopic = /喜欢|想你|约会|好看|帅|美|心跳|在一起|手|拥抱|亲|表白|秘密/.test(msg);
   const isTiredTopic = /困|累|睡|烦|难|不想上|头疼|压力|哭|委屈/.test(msg);
@@ -162,305 +163,243 @@ function buildContextualChatFallback(params: {
 
   if (id === 'npc_5') {
     if (isStudyTopic) {
+      const replies = ['看到数学题我就有点头疼哈哈', '你要是愿意帮我讲讲', '我保证老老实实坐着听完！'];
       return {
-        reply: `哈哈说到文化课我就头大！刚才那张函数卷子我看了两行就想拿去折纸飞机了……不过秀妍你要是愿意教我，我保证老老实实坐着听四十分钟，绝不乱动！`,
-        actionDesc: `姜海仁挠了挠飒爽的狼尾短发，把椅背反过来跨坐着，眼神亮晶晶地看着你`,
-        innerThought: `其实题目听不听得懂无所谓，主要是想名正言顺地多看秀妍一会儿。`,
-        newMemory: `和姜海仁聊起“${msg.slice(0, 18)}”，约定给她补习文化课`,
+        replies,
+        reply: replies.join('\n'),
+        actionDesc: `姜海仁挠了挠狼尾短发，眼神温和期待地看着你`,
+        innerThought: `其实听不听得懂没关系，主要是想跟秀妍多待一会儿。`,
+        newMemory: `和姜海仁约定一起温习功课`,
         favorabilityDelta: 5,
         moodDelta: 6,
         socialDelta: 3,
         suggestedReplies: [
-          '那说好了，这道题你要是做对了，周末我请你喝冰沙！',
-          '你们体育特长生训练那么累，文化课我帮你划最核心的考点就行！',
-          '我看你不是想学数学，是想借机偷懒吧？',
+          '那说好了，做对题我请你喝冰沙',
+          '我帮你划最核心的考点就行',
+          '待会儿下课先从第一题开始吧',
         ],
       };
     }
     if (isTiredTopic) {
+      const replies = ['是不是最近太累了？', '来靠着歇会儿吧', '待会儿放学书包交给我背就行'];
       return {
-        reply: `谁惹我们秀妍不开心了？还是最近累着了？来，靠我肩膀上歇会儿！待会儿不管是回教室还是去车站，书包全归我背，谁也别想让你受半点累！`,
-        actionDesc: `姜海仁二话不说把自己的运动外套脱下来披在你肩上，拍了拍自己结实的肩膀`,
-        innerThought: `看她露出疲惫的表情，我比自己打满五局排球赛还要心疼。`,
-        newMemory: `在秀妍疲惫时，姜海仁脱下运动外套披在她身上安慰她`,
+        replies,
+        reply: replies.join('\n'),
+        actionDesc: `姜海仁把干净的运动外套轻轻搭在你肩上`,
+        innerThought: `看她露出疲惫的样子，真的很想替她分担一点。`,
+        newMemory: `在疲惫时收到了姜海仁贴心披上的运动外套`,
         favorabilityDelta: 7,
         moodDelta: 9,
         socialDelta: 3,
         suggestedReplies: [
-          '你的外套上还有阳光和皂角的味道，披着超安心。',
-          '有海仁在身边撑腰，感觉什么烦心事都没啦！',
-          '那待会儿放学你可得请我吃校门口的鱼饼串补补元气！',
+          '外套上有阳光的味道，很安心',
+          '有海仁在身边感觉好多了',
+          '那放学一起去吃热乎乎的鱼饼串吧',
         ],
       };
     }
     if (isLoveTopic || fav >= 75) {
+      const replies = ['你突然这么说……', '我都有点不好意思了', '不过我也是这么想的，真的'];
       return {
-        reply: `喂、喂……你突然说“${msg.slice(0, 16)}”这种话，我连发球动作都要变形了！我这个人不会拐弯抹角，反正在我心里，全首尔女高、不对，全世界你就是最耀眼的那一个！`,
-        actionDesc: `姜海仁一向小麦色健康的脸颊腾地红到了耳根，手足无措地握紧了手里的排球`,
-        innerThought: `完蛋了，心跳声大得像体育馆的哨声一样，她不会听见了吧？！`,
-        newMemory: `在${location}对姜海仁说了心动的话，这位排球王牌罕见地脸红害羞了`,
+        replies,
+        reply: replies.join('\n'),
+        actionDesc: `姜海仁耳根微红，有些腼腆地笑了笑`,
+        innerThought: `心跳稍微有点快，还好没有失态。`,
+        newMemory: `在${location}和姜海仁有了默契而温暖的对话`,
         favorabilityDelta: 8,
         moodDelta: 8,
         socialDelta: 3,
         suggestedReplies: [
-          '平时在球场上那么霸气，怎么一夸你就脸红呀？',
-          '下周你们排球部比赛，我只为你一个人呐喊！',
-          '放学后我们去汉江边骑单车吹吹风吧！',
+          '海仁害羞的样子很可爱呢',
+          '下周排球部比赛我去给你加油',
+          '放学后去汉江边骑单车吹风吧',
         ],
       };
     }
-    return pick([
-      {
-        reply: `嘿！正巧在${location}碰到你！你刚才说的“${msg.slice(0, 16)}”，我刚才在体育馆热身的时候也听队员们提起了。走，我刚从小卖部抢了两瓶冰镇宝矿力，分你一瓶！`,
-        actionDesc: `姜海仁单手转着排球走过来，爽快地拧开瓶盖把第一口冰饮料递给你`,
-        innerThought: `今天运气真好，刚下训就能在${location}偶遇秀妍！`,
-        newMemory: `在${location}与姜海仁聊了“${msg.slice(0, 18)}”并分享了冰饮料`,
-        favorabilityDelta: 5,
-        moodDelta: 6,
-        socialDelta: 3,
-        suggestedReplies: [
-          '谢谢海仁！你帮我拧开瓶盖的样子超帅！',
-          '今天排球部训练量大不大？手腕还酸吗？',
-          '周末有空一起去弘大电玩城投篮比赛吗？',
-        ],
-      },
-      {
-        reply: `哈哈，听你这么说“${msg.slice(0, 16)}”太有意思了！对了秀妍，这周五下午我们在体育馆有场队内对抗赛，你要是有空来场边坐会儿，我保证给你表演个超帅的跳发得分！`,
-        actionDesc: `姜海仁比了个潇洒的扣球手势，眼神充满期待地望着你`,
-        innerThought: `只要秀妍坐在场边第一排，我就能打出百分百的王牌状态！`,
-        newMemory: `姜海仁约秀妍周五下午去体育馆看她的排球对抗赛`,
-        favorabilityDelta: 6,
-        moodDelta: 7,
-        socialDelta: 3,
-        suggestedReplies: [
-          '一定去！我还要带着相机把你跳发的瞬间拍下来！',
-          '要是你赢了比赛，我们去吃烤肉庆祝！',
-          '注意别受伤哦，我给你带了运动护腕。',
-        ],
-      },
-    ]);
+    const replies = ['正好在这儿碰到你！', '刚去小卖部买了两罐冰宝矿力', '这罐拧开了，给你喝'];
+    return {
+      replies,
+      reply: replies.join('\n'),
+      actionDesc: `姜海仁温和地笑着把拧松瓶盖的饮料递给你`,
+      innerThought: `刚下训就能碰到秀妍，今天运气真好。`,
+      newMemory: `在${location}收到了姜海仁分享的冰镇宝矿力`,
+      favorabilityDelta: 5,
+      moodDelta: 6,
+      socialDelta: 3,
+      suggestedReplies: [
+        '谢谢海仁，刚好有点渴了',
+        '今天排球部训练累不累？',
+        '周末有空一起去逛街吗？',
+      ],
+    };
   }
 
   if (id === 'npc_6') {
     if (isIdolTopic) {
+      const replies = ['这部分节奏确实不太好抓', '放学后有空吗？', '我们去独立练舞室慢慢顺一遍吧'];
       return {
-        reply: `说到舞台和练习室，你可算是问对人了。关于“${msg.slice(0, 16)}”，其实镜头最喜欢有故事感的眼神——别去讨好机位，要让机位追着你跑。今晚放学后，我带去我私藏的独立练舞室给你做特训怎么样？`,
-        actionDesc: `千宥娜摘下银色监听耳返，修长的手指轻轻托起你的下巴示范了一个极具穿透力的Ending眼神`,
-        innerThought: `秀妍的天赋和灵气比我以前在四大社见过的任何同期都要惊艳。`,
-        newMemory: `千宥娜亲自指导秀妍舞台镜头感，并邀她放学去独立练舞室合练`,
+        replies,
+        reply: replies.join('\n'),
+        actionDesc: `千宥娜摘下单侧监听耳返，温和认真地看向你`,
+        innerThought: `秀妍很努力，我想把我懂的经验都教给她。`,
+        newMemory: `千宥娜邀请秀妍放学后去练舞室一起顺动作`,
         favorabilityDelta: 7,
         moodDelta: 7,
         socialDelta: 4,
         suggestedReplies: [
-          '刚才那个眼神杀太绝了！宥娜前辈快多教我几招！',
-          '如果我们俩能站在同一个出道舞台上，一定能炸翻全场！',
-          '练完舞我请你去吃清潭洞的低卡轻食沙拉！',
+          '好呀，有宥娜指导我就安心了',
+          '练完舞我请你去吃沙拉轻食',
+          '刚才那个定点动作能再示范一次吗？',
         ],
       };
     }
-    return pick([
-      {
-        reply: `刚把降噪耳机调成透传模式就听见你的声音了。“${msg.slice(0, 18)}”？嗯，如果是别人找我聊这个我大概会觉得无聊，但既然是秀妍你说的，我很有兴趣听下去。`,
-        actionDesc: `千宥娜拨了拨璀璨的白金长卷发，唇角勾起一抹只对你展露的清浅弧度`,
-        innerThought: `转学来首尔女高最正确的决定，就是认识了李秀妍。`,
-        newMemory: `在${location}与千宥娜深聊了“${msg.slice(0, 18)}”`,
-        favorabilityDelta: 6,
-        moodDelta: 6,
-        socialDelta: 3,
-        suggestedReplies: [
-          '宥娜平时看似高冷，其实对我超温柔的！',
-          '你今天戴的珍珠发夹跟你的发色绝配！',
-          '周末陪我去汉南洞逛黑胶唱片店好不好？',
-        ],
-      },
-      {
-        reply: `看你精神这么好地提起“${msg.slice(0, 16)}”，连带着我这几天的失眠都治好了。给你，这是我早上路过圣水洞买的手冲冷萃，只有你那份加了燕麦奶。`,
-        actionDesc: `千宥娜自然地将一杯带着冰珠的特调咖啡塞进你掌心，指尖不经意擦过你的手背`,
-        innerThought: `连我自己都惊讶，居然会习惯每天早上多买一杯她喜欢的口味。`,
-        newMemory: `千宥娜特意从圣水洞给秀妍带了加燕麦奶的手冲冷萃`,
-        favorabilityDelta: 6,
-        moodDelta: 7,
-        socialDelta: 3,
-        suggestedReplies: [
-          '连我喜欢加燕麦奶都记得，宥娜太贴心了吧！',
-          '下次换我给你带我亲手做的低糖可露丽！',
-          '我们待会儿午休去天台边喝咖啡边听你的新Demo吧！',
-        ],
-      },
-    ]);
+    const replies = ['刚把耳机摘下来就看见你了', '早上路过圣水洞买了燕麦冷萃', '多带了一杯，给你留的'];
+    return {
+      replies,
+      reply: replies.join('\n'),
+      actionDesc: `千宥娜自然地把一杯加了燕麦奶的冷萃递到你手里`,
+      innerThought: `不知不觉就养成帮她多带一杯的习惯了。`,
+      newMemory: `千宥娜特意从圣水洞给秀妍带了燕麦冷萃`,
+      favorabilityDelta: 6,
+      moodDelta: 7,
+      socialDelta: 3,
+      suggestedReplies: [
+        '连我喜欢燕麦奶都记得，太贴心了',
+        '下次换我给你带手做可露丽',
+        '午休我们去天台听新歌Demo吧',
+      ],
+    };
   }
 
   if (id === 'npc_7') {
-    return pick([
-      {
-        reply: `听到你聊起“${msg.slice(0, 18)}”，真让人怀念呢。当年我在首尔女高读书的时候，也曾为了同样的事情在走廊里驻足良久。来，喝口温热的洋甘菊茶，不管你做什么决定，宋老师都会在保健室做你的后盾。`,
-        actionDesc: `宋恩静老师扶了扶玫瑰金圆框眼镜，温柔地替你将耳边的碎发理顺`,
-        innerThought: `这孩子身上的坚韧与灵气，真是越来越有当年白玉兰社团的风采了。`,
-        newMemory: `在${location}向宋恩静老师倾诉了“${msg.slice(0, 18)}”，得到了温柔开解`,
-        favorabilityDelta: 6,
-        moodDelta: 9,
-        socialDelta: 2,
-        suggestedReplies: [
-          '每次跟宋老师聊完天，心里乱糟糟的线一下子就理顺了。',
-          '老师当年在首尔女高留下的那本诗集，我能借来看看吗？',
-          '我一定会努力兼顾好学业与梦想，不让老师失望！',
-        ],
-      },
-      {
-        reply: `最近在学校和社团都忙坏了吧？你刚才说的“${msg.slice(0, 16)}”我记下了。要是觉得课业或练习压力太大，随时来保健室拉上白色床帘睡个午觉，老师帮你签假条。`,
-        actionDesc: `宋恩静老师笑着从白大褂口袋里拿出一枚薰衣草助眠香囊放进你手心`,
-        innerThought: `希望她能享受高中三年最纯粹的美好时光，不要被大人们的期望压垮。`,
-        newMemory: `宋恩静老师送给秀妍一枚薰衣草香囊，并允许她随时来保健室休息`,
-        favorabilityDelta: 6,
-        moodDelta: 10,
-        socialDelta: 2,
-        suggestedReplies: [
-          '谢谢宋老师！这个薰衣草香囊闻起来好治愈呀。',
-          '那这是我和宋老师之间的专属秘密特权咯！',
-          '周末文学社的读书沙龙我也想报名参加！',
-        ],
-      },
-    ]);
+    const replies = ['最近课业和社团都辛苦了吧', '我刚泡了温热的洋甘菊茶', '先坐下来喝一口喘口气吧'];
+    return {
+      replies,
+      reply: replies.join('\n'),
+      actionDesc: `宋恩静老师温和地笑着倒了一杯热茶递给你`,
+      innerThought: `希望她能照顾好自己，不要给自己太大压力。`,
+      newMemory: `在保健室喝了宋恩静老师泡的洋甘菊茶`,
+      favorabilityDelta: 6,
+      moodDelta: 9,
+      socialDelta: 2,
+      suggestedReplies: [
+        '跟宋老师聊会儿天心里踏实多了',
+        '这杯洋甘菊茶闻起来好香呀',
+        '周末文学社的读书会我也想参加',
+      ],
+    };
   }
 
   if (id === 'npc_8') {
-    return pick([
-      {
-        reply: `咳……李秀妍同学，关于你刚才说的“${msg.slice(0, 18)}”，从学生会纪检条例来看其实有点擦边。不过……既然是你提出来的，我昨晚已经把审批章盖好了。别、别误会，我只是秉公办理而已！`,
-        actionDesc: `尹在民略显局促地推了推金丝眼镜，将一份整理得一丝不苟的批文递给你，耳廓微红`,
-        innerThought: `昨晚为了帮她写这份特批报告改了三遍措辞……千万不能让她看出来。`,
-        newMemory: `尹在民会长嘴上讲着校规，私下却提前帮秀妍盖好了特批印章`,
-        favorabilityDelta: 6,
-        moodDelta: 7,
-        socialDelta: 3,
-        suggestedReplies: [
-          '哈哈，会长每次帮我破例的时候都会推眼镜哦！',
-          '谢谢在民学长！作为报答，今天放学我陪你去喂后山的小猫吧！',
-          '学生会有你这么靠谱又心软的会长真是太好啦。',
-        ],
-      },
-      {
-        reply: `原来你也注意到了“${msg.slice(0, 16)}”？不愧是高一最受瞩目的学生。正好学生会下周要筹备校园企划，如果你愿意来学生会室搭把手的话……我的办公桌旁边可以给你留个专属座位。`,
-        actionDesc: `尹在民合上钢笔帽，一向严肃的浅灰蓝色眼眸里映着你清晰的身影`,
-        innerThought: `只要她坐在学生会室里，连枯燥的预算报表都变得顺眼多了。`,
-        newMemory: `尹在民邀请秀妍去学生会室帮忙，并在他桌旁留了专属座位`,
-        favorabilityDelta: 7,
-        moodDelta: 6,
-        socialDelta: 4,
-        suggestedReplies: [
-          '好呀！那会长可得给我准备热可可当下午茶！',
-          '能坐在会长专属座位旁边，全校女生都要羡慕死我了。',
-          '下次模拟考的文科复习资料，我们也可以一起整理！',
-        ],
-      },
-    ]);
+    const replies = ['那个社团申请表我已经看过了', '帮你核对过细节，没问题', '下周如果忙不过来可以随时找我'];
+    return {
+      replies,
+      reply: replies.join('\n'),
+      actionDesc: `尹在民温和地推了推金丝眼镜，把整理好的文件递给你`,
+      innerThought: `能帮上她的忙就好。`,
+      newMemory: `尹在民细心地帮忙核对好了社团申请表`,
+      favorabilityDelta: 6,
+      moodDelta: 7,
+      socialDelta: 3,
+      suggestedReplies: [
+        '谢谢会长，你办事总是这么细致',
+        '放学后我陪你一起去后山喂小猫吧',
+        '下次复习资料我们一起整理吧',
+      ],
+    };
   }
 
   if (id === 'npc_3') {
     if (isStudyTopic) {
+      const replies = ['这道题昨晚补习班正好讲过变式', '我的双色笔记在这一页', '你先拿去看吧，不用急着还'];
       return {
-        reply: fav >= 60
-          ? `关于“${msg.slice(0, 16)}”，大峙洞昨晚发的压轴密卷第三题正好考到了这个变式。喏，这是我用双色笔做的批注，拿去拍张照吧……下周模拟考你要是掉出前三名，我可不认你这个对手。`
-          : `怎么，现在才开始研究“${msg.slice(0, 16)}”？我已经把近五年的全国联考真题二刷完了。想赢过我的话，今晚自习室留到十点吧。`,
-        actionDesc: `韩素拉看似随意地将她那本千金难求的大峙洞手写笔记推过桌面中线`,
-        innerThought: `全校我只把笔记借给过李秀妍一个人，她最好能明白我的心意。`,
-        newMemory: `韩素拉傲娇地将自己的大峙洞双色笔手写笔记借给秀妍参考`,
+        replies,
+        reply: replies.join('\n'),
+        actionDesc: `韩素拉把整理得干净工整的活页笔记轻轻推到你面前`,
+        innerThought: `只要她认真问，我随时都愿意跟她一起讨论。`,
+        newMemory: `韩素拉主动把大峙洞双色笔记借给秀妍参考`,
         favorabilityDelta: 6,
         moodDelta: 5,
         socialDelta: 3,
         suggestedReplies: [
-          '素拉的字迹又漂亮逻辑又清晰，简直是艺术品！',
-          '放心吧，下周月考榜首的位置我们公平竞争！',
-          '刷完这套题，我请你去喝热呼呼的燕麦拿铁暖暖胃。',
+          '素拉的笔记条理太清晰了，谢谢！',
+          '刷完这套题我请你喝热拿铁',
+          '有不懂的步骤我待会儿再请教你',
         ],
       };
     }
-    return pick([
-      {
-        reply: `……你特意跑来跟我说“${msg.slice(0, 18)}”，我还以为是什么十万火急的大事呢。算了，反正我也刚刷完一章题，就破例陪你聊五分钟休息一下眼睛。`,
-        actionDesc: `韩素拉将垂落的一缕黑长直发丝挽到耳后，清冷的蓝眸柔和了几分`,
-        innerThought: `其实听她叽叽喳喳说话的声音，比听任何白噪音都要让人安心。`,
-        newMemory: `课间找韩素拉聊了“${msg.slice(0, 18)}”，她主动放下题本陪伴`,
-        favorabilityDelta: 5,
-        moodDelta: 5,
-        socialDelta: 2,
-        suggestedReplies: [
-          '我就知道素拉嘴硬心软，才不会赶我走呢！',
-          '看你今天气色不错，昨晚终于没熬夜到两点啦？',
-          '放学后去大峙洞之前，我们一起在天台看会儿晚霞吧。',
-        ],
-      },
-    ]);
+    const replies = ['正好我也刚写完这一节', '休息五分钟吧', '你今天看起来气色挺不错的'];
+    return {
+      replies,
+      reply: replies.join('\n'),
+      actionDesc: `韩素拉轻轻合上笔盖，语气温和地看向你`,
+      innerThought: `和秀妍待在一起的时候，紧绷的神经会放松很多。`,
+      newMemory: `课间与韩素拉一起休息闲聊`,
+      favorabilityDelta: 5,
+      moodDelta: 5,
+      socialDelta: 2,
+      suggestedReplies: [
+        '看你今天精神也不错，昨晚早睡啦？',
+        '放学去补习班前一起吃个简餐吧',
+        '给，分你一颗柠檬薄荷糖提提神',
+      ],
+    };
   }
 
   if (id === 'npc_4') {
-    return pick([
-      {
-        reply: `刚才在调试调音台的时候还在想你呢，结果你就带着“${msg.slice(0, 16)}”的话题出现了。来，戴上这只监听耳机听听看，这是我昨晚新编的木吉他曲，第一个弹给你听。`,
-        actionDesc: `李恩宇学长温柔地弯下腰，亲手将柔软的耳机罩戴在你的耳畔`,
-        innerThought: `写这首曲子的时候，脑海里浮现的全是秀妍在阳光下微笑的样子。`,
-        newMemory: `李恩宇学长让秀妍成为他新编木吉他曲的第一个听众`,
-        favorabilityDelta: 7,
-        moodDelta: 8,
-        socialDelta: 3,
-        suggestedReplies: [
-          '旋律好温柔啊……学长写的曲子每次都能治愈我！',
-          '这首曲子叫什么名字呀？以后能在校园祭上听到吗？',
-          '下次学长弹吉他的时候，我来给学长伴唱好不好？',
-        ],
-      },
-      {
-        reply: `听你这么生动地讲起“${msg.slice(0, 18)}”，连${location}的空气都变得明快起来了。给，看你跑过来额头都有点微汗，这罐温麦茶是我刚买的，快喝一口吧。`,
-        actionDesc: `李恩宇学长笑着从口袋里取出纸巾递给你，目光温柔得像春日的微风`,
-        innerThought: `不管是作为学妹还是特别的人，她总是能轻易牵动我的情绪。`,
-        newMemory: `在${location}和李恩宇学长愉快交谈，收到了他递来的温麦茶`,
-        favorabilityDelta: 6,
-        moodDelta: 7,
-        socialDelta: 3,
-        suggestedReplies: [
-          '谢谢恩宇学长，学长永远这么细心体贴！',
-          '今天午休广播室的歌单我已经期待一上午啦！',
-          '周末乐队排练的时候，我可以带零食去探班吗？',
-        ],
-      },
-    ]);
+    const replies = ['刚在广播室调好音就遇到你了', '昨晚新编了一段木吉他旋律', '要不要戴上耳机听听看？'];
+    return {
+      replies,
+      reply: replies.join('\n'),
+      actionDesc: `李恩宇学长温和地把一只监听耳机递到你手边`,
+      innerThought: `写这首曲子的时候，很希望第一个听见的人是秀妍。`,
+      newMemory: `李恩宇学长邀请秀妍试听他新编的木吉他曲`,
+      favorabilityDelta: 7,
+      moodDelta: 8,
+      socialDelta: 3,
+      suggestedReplies: [
+        '旋律好温暖，听着心情都变好了',
+        '这首曲子叫什么名字呀？',
+        '周末乐队排练我可以带零食去探班吗？',
+      ],
+    };
   }
 
   if (id === 'npc_2') {
-    return pick([
-      {
-        reply: `天哪秀妍！你说的“${msg.slice(0, 18)}”简直跟我想的一模一样！！而且我跟你说，我刚在Stargram上刷到圣水洞出了超美的新款水光唇釉和人生四格拍贴框，今天放学我们必须去打卡！`,
-        actionDesc: `金智英兴奋地挽住你的手臂，拿出小巧的气垫粉饼对着镜子跟你贴脸比心`,
-        innerThought: `我们秀妍今天这张脸蛋状态简直是女团门面级别，带出去逛街太有面子了！`,
-        newMemory: `和金智英热聊“${msg.slice(0, 18)}”，约好放学去圣水洞打卡`,
-        favorabilityDelta: 6,
-        moodDelta: 7,
-        socialDelta: 4,
-        suggestedReplies: [
-          '冲冲冲！放学铃一响我们就出发，还要拍十张上传Stargram！',
-          '智英每次推荐的探店和美妆从来不踩雷！',
-          '对了，刚才班里大家凑在一起在聊什么八卦呀？',
-        ],
-      },
-    ]);
+    const replies = ['秀妍！我正想找你呢', '圣水洞新开了一家超可爱的拍贴店', '今天放学我们一起去逛逛好不好？'];
+    return {
+      replies,
+      reply: replies.join('\n'),
+      actionDesc: `金智英笑盈盈地凑过来，眼睛亮晶晶地看着你`,
+      innerThought: `跟秀妍一起逛街拍照永远是最开心的事。`,
+      newMemory: `金智英约秀妍放学后一起去圣水洞拍贴店打卡`,
+      favorabilityDelta: 6,
+      moodDelta: 7,
+      socialDelta: 4,
+      suggestedReplies: [
+        '好呀！放学铃一响我们就出发',
+        '智英推荐的店肯定很出片',
+        '顺便去旁边买杯水蜜桃冰茶吧',
+      ],
+    };
   }
 
   if (npc?.isGenerated) {
-    const role = npc?.role || '朋友';
     const cName = npc?.chineseName || '新朋友';
-    const style = npc?.speakingStyle || '亲切真诚';
+    const replies = ['这么巧在这儿遇到你', '最近学校里还忙得过来吗？', '有空的话我们去附近喝杯热饮吧'];
     return {
-      reply: `秀妍！听到你跟我聊“${msg.slice(0, 18)}”，感觉我们之间越来越熟络了呢。在${location}这边，平时的气氛总是很特别，很高兴能跟你分享这些！`,
-      actionDesc: `${cName}停下手中的动作，转过头来注视着你，眼神里满是属于【${role}】的独特神采`,
-      innerThought: `上次在街头偶遇相识后，每次跟秀妍聊天都觉得格外合拍。`,
-      newMemory: `和${cName}在${location}聊了关于“${msg.slice(0, 18)}”的话题，友谊更加深厚了`,
+      replies,
+      reply: replies.join('\n'),
+      actionDesc: `${cName}停下脚步，温和友善地朝你微笑`,
+      innerThought: `每次偶遇秀妍，聊起天来都觉得很投缘。`,
+      newMemory: `在${location}与${cName}愉快寒暄并约好喝热饮`,
       favorabilityDelta: 6,
       moodDelta: 6,
       socialDelta: 4,
       suggestedReplies: [
-        `哈哈，你刚才说话的神态真的太有【${role}】的气质了！`,
-        `下次如果有空的话，我们再去上次那家店坐坐吧！`,
-        `能认识你真的太好了，感觉首尔的生活越来越精彩了。`,
+        '好呀，正好我也想歇一会儿',
+        '你今天看起来心情很不错呢',
+        '下次再去我们上次去过的那家店坐坐吧',
       ],
     };
   }
@@ -468,31 +407,33 @@ function buildContextualChatFallback(params: {
   // Default npc_1 朴敏英
   return pick([
     {
-      reply: `嗯嗯！秀妍你说的“${msg.slice(0, 18)}”我太有共鸣了！刚才上课我还悄悄在草稿纸角落画了我们俩的Q版插画呢，你看像不像？待会儿不管是去小卖部还是去图书馆，我都跟你一块儿去！`,
-      actionDesc: `朴敏英笑得眼睛弯成月牙，把画着你们俩同桌日常的速写本悄悄推到你面前`,
-      innerThought: `能和秀妍做同桌真是我高中三年最幸福的事，要把我们的故事都画进漫画里。`,
-      newMemory: `朴敏英在速写本上画了和秀妍的同桌Q版插画，并聊了“${msg.slice(0, 18)}”`,
+      replies: ['秀妍，我刚在速写本角落画了个小插画', '画的是我们俩课间的样子', '待会儿下课一起去小卖部买草莓牛奶吧？'],
+      reply: '秀妍，我刚在速写本角落画了个小插画\n画的是我们俩课间的样子\n待会儿下课一起去小卖部买草莓牛奶吧？',
+      actionDesc: `朴敏英弯起眉眼，把速写本轻轻往你这边推了推`,
+      innerThought: `能和秀妍做同桌，每天来上学都觉得很开心。`,
+      newMemory: `朴敏英画了同桌日常小插画，并约秀妍去买草莓牛奶`,
       favorabilityDelta: 6,
       moodDelta: 7,
       socialDelta: 3,
       suggestedReplies: [
-        '哇画得太可爱了吧！敏英以后一定会成为大漫画家的！',
-        '快把这一页撕下来送给我，我要夹在手帐本最前面珍藏！',
-        '走，为了犒劳我们敏英大画家，请你去吃延世奶油面包！',
+        '画得好可爱！我要夹进手帐本珍藏',
+        '走呀，今天我请你吃延世奶油面包',
+        '放学后我们一起去文具店挑贴纸吧',
       ],
     },
     {
-      reply: `听你提到“${msg.slice(0, 18)}”，我就放心啦！对了秀妍，我抽屉里还藏着今天早上刚买的草莓牛奶和蜂蜜黄油杏仁，趁现在${timeContext.split(' ').slice(-1)[0] || '课间'}没人注意，我们一人一半！`,
-      actionDesc: `朴敏英神神秘秘地护着课桌洞口，把插好吸管的冰镇草莓牛奶塞进你手里`,
-      innerThought: `看到秀妍开心的笑脸，我今天连载条漫的灵感又源源不断了！`,
-      newMemory: `和同桌朴敏英偷偷在课间分享了冰镇草莓牛奶与蜂蜜杏仁`,
+      replies: ['我抽屉里还留了一盒草莓百奇', '今天早上刚买的，可脆了', '趁现在课间，我们分着吃吧~'],
+      reply: '我抽屉里还留了一盒草莓百奇\n今天早上刚买的，可脆了\n趁现在课间，我们分着吃吧~',
+      actionDesc: `朴敏英从课桌里拿出一盒草莓百奇，温和地递到你手边`,
+      innerThought: `跟秀妍分享喜欢的小零食最开心了。`,
+      newMemory: `课间和同桌朴敏英一起分吃了草莓百奇`,
       favorabilityDelta: 6,
       moodDelta: 8,
       socialDelta: 3,
       suggestedReplies: [
-        '敏英的课桌简直是哆啦A梦的百宝袋，太好喝了！',
-        '下节课要是老师抽背英语单词，我们互相打暗号哦！',
-        '放学后我们一起走，去文具店挑新的手帐贴纸吧！',
+        '敏英的课桌永远藏着好吃的！',
+        '那我把我带的果冻分你一半',
+        '下节课要是困了我们互相提醒哦',
       ],
     },
   ]);
@@ -653,52 +594,53 @@ async function startServer() {
             .join('\n')
         : '（刚刚走近开始搭话）';
 
-    const systemPrompt = `你正在进行一场极具现实生活质感、百分之百【绝对真人化】的《韩国女高模拟器》沉浸式对话。
-你不是AI，你就是首尔女子高中1-1班活生生的高中女生【${npc?.chineseName}】（${npc?.koreanName}，身份：${npc?.role}）。
+    const systemPrompt =
+      req.body.systemPromptOverride ||
+      `${NPC_CHAT_LIVING_PERSONA_RULES}
 
-【绝对人设与发言规则（违者严重失格）】
-1. 称呼习惯：对李秀妍习惯称呼为【${nickname}】。
-2. 句式与口癖：${speakingStyle}。
-3. 严格禁止使用任何客服套话，严禁出现这些禁用词：[ ${forbiddenList} ]。
-4. 当前好感度 (${currentFav}/100) 下的态度表现：【${attitudeDesc}】。
-5. 限制：单次输出【限制在 1-3 句自然口语】！必须带出神态或微动作，严禁分点列举，严禁客服腔说明文！
-6. 【绝对禁止复读】不要复述李秀妍的话，直接发表你的看法、情绪反应、吐槽或调侃。
+${ANTI_AI_STYLE_RULES}
 
-【角色个性背景】
-${persona}
-
-【当前情境】
-- 时间：${timeContext || '课间休息'}
-- 地点：${location || '2楼走廊'}
-- 关系阶段：【${stage}】（好感 ${currentFav}，心动 ${currentRomance}）
-- 过往共同记忆：
-${memoryList}
-${ANTI_AI_STYLE_RULES}`;
+【一、强制前置读取：角色人设卡、专属记忆区（memories）与当前时空】
+- 角色姓名：${npc?.chineseName}（${npc?.koreanName}）
+- 角色身份：${npc?.role}
+- 角色背景与性格注释（仅供行为转化，严禁复读标签）：${persona}
+- 对李秀妍的称呼习惯：【${nickname}】
+- 说话方式与口癖：${speakingStyle}
+- 严禁出现的客服与元词汇：[ ${forbiddenList} ]
+- 当前好感度与关系阶段：【${stage}】（好感 ${currentFav}/100，心动 ${currentRomance}，当前态度：${attitudeDesc}）
+- 当前时间：${timeContext || '课间休息'}
+- 当前地点：${location || '2楼走廊'}
+- 与玩家的专属记忆区（memories）：
+${memoryList}`;
 
     const userPrompt = `【刚才的对话上下文】
 ${historyText}
 
-【李秀妍刚刚对你说】
+【李秀妍刚刚发消息说】
 “${userMessage}”
 
-请以纯正的韩国女高生真人身份、结合当前好感关系（${stage}，好感 ${currentFav}）给出极具呼吸感与情绪波动的日常口语回答。
-必须严格返回如下 JSON 格式（全部使用自然流畅的简体中文，绝不出现任何AI腔调）：
+请严格遵循【核心语气与活人感十条铁律】：
+1. 严禁复述李秀妍刚刚说的话！直接自然接话。
+2. 严禁写长篇作文！将回复拆分为 1~3 条简短口语气泡放入 \`replies\` 数组，每条气泡控制在 5~22 字以内。
+3. 语气必须平等、温和、尊重，禁止居高临下、威胁、痞气、轻佻或强行总结。
+
+必须严格返回如下 JSON 格式：
 {
-  "reply": "极具真人感、充满呼吸感与情绪波动的日常口语台词（30-85字，像真人在KakaoTalk或课间跟你面对面聊天，带语气助词和真情实感，绝对不要假大空）",
-  "innerThought": "角色此时此刻真实、细腻、甚至有点小心思的私密内心OS（15-40字）",
-  "actionDesc": "生动传神、充满韩漫画面感的微动作、眼神或神态描写（15-35字）",
+  "replies": ["短句气泡1（5-20字）", "短句气泡2（5-20字，可选）"],
+  "reply": "短句气泡用换行连接后的台词",
+  "innerThought": "角色此刻温和真实的私密心声（12-28字）",
+  "actionDesc": "自然细腻的微动作或神态（12-25字）",
   "newMemory": "若聊到重要约定或心事则总结成一句话，否则填 \"\"",
   "extractedKeywords": ["1-2个记忆标签"],
   "favorabilityDelta": 5,
   "moodDelta": 5,
   "socialDelta": 3,
   "suggestedReplies": [
-    "自然口语回复1",
-    "随性调侃回复2",
-    "甜蜜互动回复3"
+    "自然短句回复1",
+    "自然短句回复2",
+    "自然短句回复3"
   ]
-}
-${ANTI_AI_STYLE_RULES}`;
+}`;
 
     try {
       const client = getGenAIClient();
@@ -711,6 +653,11 @@ ${ANTI_AI_STYLE_RULES}`;
             responseSchema: {
               type: Type.OBJECT,
               properties: {
+                replies: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: '拆分为1-3条5-20字的即时通讯短句气泡',
+                },
                 reply: { type: Type.STRING },
                 innerThought: { type: Type.STRING },
                 actionDesc: { type: Type.STRING },
@@ -729,6 +676,7 @@ ${ANTI_AI_STYLE_RULES}`;
                 },
               },
               required: [
+                'replies',
                 'reply',
                 'innerThought',
                 'actionDesc',
@@ -743,7 +691,13 @@ ${ANTI_AI_STYLE_RULES}`;
           },
         });
         const text = response.text || '{}';
-        res.json(sanitizeAntiAIResponse(JSON.parse(text)));
+        const parsed = sanitizeAntiAIResponse(JSON.parse(text));
+        const bubbles = splitNpcReplyIntoBubbles(parsed.reply || '', parsed.replies, userMessage);
+        res.json({
+          ...parsed,
+          replies: bubbles,
+          reply: bubbles.join('\n'),
+        });
         return;
       }
     } catch (_error: any) {
@@ -752,16 +706,22 @@ ${ANTI_AI_STYLE_RULES}`;
 
     // Try Live AI OpenAI-compatible LLM when Gemini token scope is restricted
     const liveAIResult = await callLiveOpenAICompatibleLLM(systemPrompt, userPrompt);
-    if (liveAIResult && typeof liveAIResult.reply === 'string' && liveAIResult.reply.trim().length > 0) {
+    if (
+      liveAIResult &&
+      ((typeof liveAIResult.reply === 'string' && liveAIResult.reply.trim().length > 0) ||
+        (Array.isArray(liveAIResult.replies) && liveAIResult.replies.length > 0))
+    ) {
+      const bubbles = splitNpcReplyIntoBubbles(liveAIResult.reply || '', liveAIResult.replies, userMessage);
       res.json({
-        reply: liveAIResult.reply,
+        replies: bubbles,
+        reply: bubbles.join('\n'),
         innerThought: liveAIResult.innerThought || '看着秀妍说话的样子，心情不自觉变好了。',
-        actionDesc: liveAIResult.actionDesc || `${npc?.chineseName}认真地注视着你的眼睛`,
+        actionDesc: liveAIResult.actionDesc || `${npc?.chineseName}温和地注视着你的眼睛`,
         newMemory: liveAIResult.newMemory || '',
         extractedKeywords:
           Array.isArray(liveAIResult.extractedKeywords) && liveAIResult.extractedKeywords.length > 0
             ? liveAIResult.extractedKeywords.slice(0, 3)
-            : [`${location}闲聊`, `${userMessage.slice(0, 8)}`],
+            : [`${location}日常`],
         favorabilityDelta: typeof liveAIResult.favorabilityDelta === 'number' ? liveAIResult.favorabilityDelta : 5,
         moodDelta: typeof liveAIResult.moodDelta === 'number' ? liveAIResult.moodDelta : 5,
         socialDelta: typeof liveAIResult.socialDelta === 'number' ? liveAIResult.socialDelta : 3,
@@ -769,9 +729,9 @@ ${ANTI_AI_STYLE_RULES}`;
           Array.isArray(liveAIResult.suggestedReplies) && liveAIResult.suggestedReplies.length > 0
             ? liveAIResult.suggestedReplies.slice(0, 3)
             : [
-                '哈哈，跟你想的一模一样！',
+                '哈哈，我也是这么想的',
                 '那我们放学后一起去圣水洞逛逛吧？',
-                '待会儿下节课你可别打瞌睡哦！',
+                '待会儿下节课见咯',
               ],
       });
       return;
@@ -1000,34 +960,43 @@ ${ANTI_AI_STYLE_RULES}`;
     }
   });
 
-app.post('/api/ai/group-chat', async (req, res) => {
-    const { userMessage, groupType = 'class', npcs = [], timeContext = '放学后' } = req.body;
+  app.post('/api/ai/group-chat', async (req, res) => {
+    const { userMessage, groupType = 'class', timeContext = '放学后', systemPromptOverride } = req.body;
 
-    const systemPrompt = `你是《韩国女高模拟器》中 KakaoTalk 群聊的实时AI模拟器。
+    const systemPrompt =
+      systemPromptOverride ||
+      `${NPC_CHAT_LIVING_PERSONA_RULES}
+${ANTI_AI_STYLE_RULES}
+你是《韩国女高模拟器》中 KakaoTalk 群聊的实时对话生成引擎。
 群聊名称：${groupType === 'idol' ? '【四大社出道预备组练习生群】' : '【首尔女高 1-1班 快乐大本营】'}
 群成员包括：
-- 朴敏英（同桌死党，温柔体贴，条漫作者）
-- 金智英（时尚美妆与八卦达人，气氛组组长）
-- 韩素拉（全校第一高冷学霸，嘴硬心软，偶尔冒泡一针见血）
-- 李恩宇（广播社温柔学长）
-- 姜海仁（女排王牌，爽朗护短）
-- 千宥娜（前C位练习生转学生，酷飒毒舌但宠秀妍）
-- 尹在民（学生会长，一本正经但总对秀妍破例）`;
+- 朴敏英（同桌死党，温柔体贴）
+- 金智英（时尚美妆达人，活泼轻快）
+- 韩素拉（认真自律的优等生，温和克制）
+- 李恩宇（广播社温和学长）
+- 姜海仁（女排主力，爽朗坦诚）
+- 千宥娜（转学生练习生，干脆真诚）
+- 尹在民（学生会长，礼貌守规）`;
 
     const userPrompt = `主角【李秀妍】刚刚在 KakaoTalk 群里发了一条消息：“${userMessage}”（当前时间：${timeContext}）。
-请生成 3 到 4 位不同性格的 NPC 在群里的连续秒回互动（他们不仅会回复秀妍，还会互相接梗吐槽），严格返回如下 JSON 格式（简体中文）：
+请严格遵守【核心语气与活人感十条铁律】，生成 3 到 4 位不同角色的简短秒回（每条严格控制在 6~20 字以内，严禁复述李秀妍原话！），严格返回如下 JSON 格式：
 {
   "messages": [
-    { "npcId": "npc_2", "npcName": "金智英", "text": "群聊回复内容1" },
-    { "npcId": "npc_1", "npcName": "朴敏英", "text": "群聊回复内容2" },
-    { "npcId": "npc_3", "npcName": "韩素拉", "text": "群聊回复内容3" },
-    { "npcId": "npc_6", "npcName": "千宥娜", "text": "群聊回复内容4" }
+    { "npcId": "npc_2", "npcName": "金智英", "text": "6-20字简短秒回1" },
+    { "npcId": "npc_1", "npcName": "朴敏英", "text": "6-20字简短秒回2" },
+    { "npcId": "npc_3", "npcName": "韩素拉", "text": "6-20字简短秒回3" },
+    { "npcId": "npc_6", "npcName": "千宥娜", "text": "6-20字简短秒回4" }
   ]
 }`;
 
     const liveResult = await callLiveOpenAICompatibleLLM(systemPrompt, userPrompt);
     if (liveResult && Array.isArray(liveResult.messages) && liveResult.messages.length > 0) {
-      res.json({ messages: liveResult.messages });
+      res.json({
+        messages: liveResult.messages.map((m: any) => ({
+          ...m,
+          text: splitNpcReplyIntoBubbles(m.text || '', undefined, userMessage)[0] || m.text,
+        })),
+      });
       return;
     }
 
@@ -1036,22 +1005,22 @@ app.post('/api/ai/group-chat', async (req, res) => {
         {
           npcId: 'npc_2',
           npcName: '金智英',
-          text: `捕捉野生秀妍！！“${(userMessage || '').slice(0, 18)}”？算我一个算我一个！我现在就换衣服出门！✨`,
+          text: `算我一个！我现在就收拾书包准备出发~`,
         },
         {
           npcId: 'npc_1',
           npcName: '朴敏英',
-          text: `哈哈智英秒回的速度永远是全班第一！秀妍，我都听你的，需要我带相机和零食吗？🍓`,
+          text: `哈哈智英秒回好快，需要我带相机和零食吗？`,
         },
         {
           npcId: 'npc_3',
           npcName: '韩素拉',
-          text: `……你们几个在群里刷屏99+，害我刷数学卷子的时候手机一直在震。不过如果是秀妍说的这件事，我勉强可以抽出半小时参加。`,
+          text: `刚好我这节题写完了，可以跟你们一起去半小时。`,
         },
         {
           npcId: 'npc_6',
           npcName: '千宥娜',
-          text: `刚从练习室出来就看到秀妍发消息了。定位发我，十分钟后到。🎧`,
+          text: `刚从练习室出来，把定位发我吧，十分钟到。`,
         },
       ],
     });
@@ -1121,43 +1090,85 @@ app.post('/api/ai/group-chat', async (req, res) => {
       timeContext,
       npcs,
       recentMemories,
+      gradeYear = 1,
+      weekInYear = 1,
+      seasonLabel = '春季学期',
+      highestStat,
+      lowestStat,
+      featuredNpc,
+      triggeredEventHistory = [],
       narrativeStyle,
       customPrompt,
+      systemPromptOverride,
     } = req.body;
 
-    const npcSummary = Array.isArray(npcs)
-      ? npcs.map((n: any) => `${n.chineseName}(${n.role},好感${n.favorability})`).join('、')
-      : '朴敏英、金智英、韩素拉、李恩宇';
+    const validNpcs = Array.isArray(npcs) && npcs.length > 0 ? npcs : [];
+    const chosenNpc =
+      featuredNpc ||
+      (validNpcs.length > 0
+        ? validNpcs[Math.floor(Math.random() * validNpcs.length)]
+        : undefined);
+    const targetNpcId = chosenNpc?.id || 'npc_1';
+
+    const recentForbiddenList = Array.isArray(triggeredEventHistory)
+      ? triggeredEventHistory.slice(-10)
+      : [];
+
+    const forbiddenPromptText =
+      recentForbiddenList.length > 0
+        ? `【禁止重复列表（最近10条已发生事件）】：[ ${recentForbiddenList.join(' | ')} ]。\n严禁生成与以上历史事件雷同或类似的桥段，必须根据玩家当前的周数（高${gradeYear}第${weekInYear}周）、地点（${location}）、季节（${seasonLabel}）和人际关系构思全新的戏剧冲突！`
+        : `必须根据玩家当前的周数（高${gradeYear}第${weekInYear}周）、地点（${location}）、季节（${seasonLabel}）和人际关系构思全新的戏剧冲突！`;
+
+    const npcMemStr =
+      Array.isArray(chosenNpc?.memories) && chosenNpc.memories.length > 0
+        ? chosenNpc.memories.slice(-5).join('；')
+        : '近期在校园与首尔街头刚熟络起来';
 
     const memText =
       Array.isArray(recentMemories) && recentMemories.length > 0
-        ? recentMemories.slice(-8).join('；')
+        ? recentMemories.slice(-6).join('；')
         : '新学期刚开始的日常';
 
-    const systemPrompt = `你是《韩国女高模拟器》的写实派校园编剧。请写一段贴近现实韩国高中生活的突发小插曲。\n${ANTI_AI_STYLE_RULES}`;
-    const userPrompt = `主角李秀妍当前的真实时间：${timeContext}，地点：${location}，近期记忆：${memText}，认识的同学：${npcSummary}，文风：${narrativeStyle}。${customPrompt ? `玩家期望剧情：“${customPrompt}”。` : ''}
-必须严格返回如下 JSON 格式：
+    const systemPrompt =
+      systemPromptOverride ||
+      `你是《韩国女高模拟器》的首席校园剧集编剧。
+${forbiddenPromptText}
+${ANTI_AI_STYLE_RULES}`;
+
+    const userPrompt = `【当前玩家与人际真实上下文】
+- 当前周数与季节：高${gradeYear}第${weekInYear}周（${seasonLabel} · ${timeContext}）
+- 当前所在地点：${location}
+- 玩家最高属性：${highestStat ? `${highestStat.label}(${highestStat.value})` : `外形(${stats?.appearance || 70})`}，最低属性：${lowestStat ? `${lowestStat.label}(${lowestStat.value})` : `社团(${stats?.clubSkill || 30})`}
+- 关联真实已结识 NPC：【${chosenNpc?.chineseName || '朴敏英'}】（ID: ${targetNpcId}，身份：${chosenNpc?.role || '同班同学'}，关系：${chosenNpc?.relationshipStage || '朋友'}，好感度：${chosenNpc?.favorability ?? 60}，说话风格：${chosenNpc?.speakingStyle || '自然亲切'}）
+- 该 NPC 的过往共同记忆：${npcMemStr}
+- 玩家近期记忆：${memText}
+- 文风偏好：${narrativeStyle || '细腻写实韩剧风'}
+${customPrompt ? `- 玩家特别指定剧情方向：“${customPrompt}”` : ''}
+
+${forbiddenPromptText}
+请围绕上述真实数据现场编排一段 80-120 字的突发事件剧情描写，并提供 2~3 个差异化抉择项及对应影响。必须严格返回如下 JSON 格式：
 {
-  "title": "事件标题",
-  "content": "90-140字细腻写实的校园场景与人物描写",
+  "title": "全新的事件标题",
+  "categoryLabel": "AI 实时推演 · 高${gradeYear}第${weekInYear}周",
+  "content": "80-120字细腻写实的现场剧情描写（必须包含${chosenNpc?.chineseName || '朴敏英'}的具体互动与细节）",
   "options": [
     {
-      "text": "选项1文字",
+      "text": "差异化抉择1",
       "resultText": "选择后的具体反馈",
       "memoryLog": "记录进记忆手帐的一句话总结",
-      "effect": { "mood": 6, "stamina": -4, "academics": 3, "social": 4, "appearance": 1, "coins": 0, "npcId": "npc_1", "favDelta": 6 }
+      "effect": { "mood": 6, "stamina": -4, "academics": 4, "social": 5, "appearance": 1, "coins": 0, "npcId": "${targetNpcId}", "favDelta": 7 }
     },
     {
-      "text": "选项2文字",
+      "text": "差异化抉择2",
       "resultText": "选择后的具体反馈",
       "memoryLog": "记录进记忆手帐的一句话总结",
-      "effect": { "mood": 8, "stamina": -2, "academics": 0, "social": 5, "appearance": 2, "coins": 0, "npcId": "npc_4", "favDelta": 6 }
+      "effect": { "mood": 8, "stamina": -2, "academics": 0, "social": 6, "appearance": 2, "coins": 0, "npcId": "${targetNpcId}", "favDelta": 8 }
     },
     {
-      "text": "选项3文字",
+      "text": "差异化抉择3",
       "resultText": "选择后的具体反馈",
       "memoryLog": "记录进记忆手帐的一句话总结",
-      "effect": { "mood": 4, "stamina": -6, "academics": 6, "social": 2, "appearance": 0, "coins": 0, "npcId": "npc_3", "favDelta": 5 }
+      "effect": { "mood": 4, "stamina": 4, "academics": 3, "social": 2, "appearance": 0, "coins": 0, "npcId": "${targetNpcId}", "favDelta": 4 }
     }
   ]
 }`;
@@ -1171,8 +1182,11 @@ app.post('/api/ai/group-chat', async (req, res) => {
           config: { responseMimeType: 'application/json' },
         });
         const text = response.text || '{}';
-        res.json(sanitizeAntiAIResponse(JSON.parse(text)));
-        return;
+        const parsed = sanitizeAntiAIResponse(JSON.parse(text));
+        if (parsed && parsed.title && Array.isArray(parsed.options) && parsed.options.length > 0) {
+          res.json(parsed);
+          return;
+        }
       }
     } catch (_error: any) {
       handleGenAIError(_error);
@@ -1180,17 +1194,14 @@ app.post('/api/ai/group-chat', async (req, res) => {
 
     const liveEvent = await callLiveOpenAICompatibleLLM(systemPrompt, userPrompt);
     if (liveEvent && liveEvent.title && Array.isArray(liveEvent.options) && liveEvent.options.length > 0) {
-      res.json(liveEvent);
+      res.json(sanitizeAntiAIResponse(liveEvent));
       return;
     }
 
-    res.json(
-      buildContextualEventFallback({
-        location: location || '2楼走廊',
-        timeContext: timeContext || '10:15 课间',
-        customPrompt,
-      })
-    );
+    // If both AI providers fail or are offline, return 503 so frontend uses deduplicated local eventsPool fallback
+    res.status(503).json({
+      error: 'AI 实时推演超时或断网，切换本地去重事件兜底',
+    });
   });
 
   // 3. Realistic AI Campus Forum / Bamboo Forest Anonymous Wall
@@ -1202,75 +1213,305 @@ app.post('/api/ai/group-chat', async (req, res) => {
         ? recentMemories.slice(-6).join('；')
         : '开学第一周日常';
 
-    const systemPrompt = `你是韩国首尔女子高中校内匿名论坛“竹林墙（대나무숲）”生成器。`;
-    const userPrompt = `当前时间：${timeContext || '3月 第1周'}。高一(1)班李秀妍当前属性：学业${stats?.academics}，社交${stats?.social}，外形${stats?.appearance}，SNS粉丝${stats?.snsFollowers}。近期校园真实记忆：${memText}。
-${playerPost ? `李秀妍刚刚发了一条帖子：“${playerPost}”，请让第一条帖子是对她的直接热议！` : ''}
+    const systemPrompt =
+      req.body.systemPromptOverride ||
+      `你是韩国首尔女子高中与四大社练习生内部匿名论坛（Theqoo / 竹林墙风格）生成器。\n${ANTI_AI_STYLE_RULES}`;
+    const userPrompt = `当前时间：${timeContext || '3月 第1周'}。高一(1)班李秀妍当前属性：学业${stats?.academics}，社交${stats?.social}，外形${stats?.appearance}，练习生等级：${stats?.traineeGrade || 'A班练习生'}，SNS粉丝${stats?.snsFollowers}。近期校园与训练真实记忆：${memText}。
+${playerPost ? `李秀妍刚刚发了一条匿名帖：“${playerPost}”，请让第一条帖子是对该帖子的直接引爆热议！` : '请生成3条Theqoo风格匿名八卦热帖（如练习生考核惊艳全场、深夜汉江偶遇、出道预备役顺位预测、校园风云人物讨论）。'}
 请严格返回如下 JSON 格式：
 {
   "posts": [
     {
-      "author": "匿名昵称",
+      "author": "匿名Theqoo无名氏",
       "tag": "板块标签",
       "title": "帖子标题",
       "content": "帖子正文",
-      "likes": 128,
-      "comments": ["评论1", "评论2"]
+      "likes": 328,
+      "comments": ["1L: 热评1", "2L: 热评2", "3L: 热评3"]
     }
   ]
 }`;
 
     const liveForum = await callLiveOpenAICompatibleLLM(systemPrompt, userPrompt);
     if (liveForum && Array.isArray(liveForum.posts) && liveForum.posts.length > 0) {
-      res.json({ posts: liveForum.posts.slice(0, 3) });
+      res.json({ posts: sanitizeAntiAIResponse(liveForum.posts.slice(0, 4)) });
       return;
     }
 
     const latestMem =
       Array.isArray(recentMemories) && recentMemories.length > 0
         ? recentMemories[recentMemories.length - 1]
-        : '高一1班的日常互动';
+        : '高一1班与练习室的日常互动';
 
     const fallbackPosts = [
       ...(playerPost
         ? [
             {
-              author: '高一1班李秀妍 (匿名投递)',
-              tag: '实时新帖',
-              title: playerPost,
-              content: `刚在${timeContext || '课间'}发出的匿名心声：“${playerPost}”`,
-              likes: 88,
+              author: 'Theqoo匿名爆料人',
+              tag: '🔥 实时热帖',
+              title: `[热议] ${playerPost}`,
+              content: `刚在匿名区刷到的热帖：“${playerPost}”，不到十分钟浏览量就破千了，评论区全在猜是不是高一(1)班的那位风云人物！`,
+              likes: 426,
               comments: [
-                '前排捕捉！这语气一看就是我们高一的可爱妹妹！',
-                '顶上去，祝楼主今天心情满分，月考全一等级！',
+                '1L: 晕，这语气一看就是我们学校的人，前排吃瓜！',
+                '2L: 听说她最近在练习室和学校两边连轴转，状态还这么绝！',
+                '3L: 蹲一个后续，我已经把本帖设为特别关注了ㅋㅋㅋ',
               ],
             },
           ]
         : []),
       {
-        author: '2楼走廊观察员',
-        tag: '校园风向',
-        title: '有人注意到高一(1)班最近发生的事吗？',
-        content: `听说最近：${latestMem}。而且李秀妍现在的学业已经有 ${stats?.academics || 76} 分、外形 ${stats?.appearance || 82} 分了，简直是今年高一的风云人物！`,
-        likes: 112,
+        author: '练习室监控君',
+        tag: '🎤 练习生瓜',
+        title: '[HOT] 高一(1)班那个练习生是谁？今天舞蹈考核直接惊艳全场！',
+        content: `今天下午路过地下A级考核厅，隔着玻璃看到李秀妍跳的那段高难度卡点，连一向毒舌的首席导师都当场点头給了A+！現在Stargram粉丝已经涨到 ${stats?.snsFollowers || 1200} 了，这绝对是下一代五代女团门面预定吧？`,
+        likes: 618,
         comments: [
-          '真的！我今天课间经过1-1班门口也看到了，本人超有气质！',
-          '朴敏英跟她同桌每天都形影不离，神仙友情实名羡慕了~',
+          '1L: 大发！！我今天在走廊也看见她了，生图皮肤白到发光！',
+          '2L: 千宥娜前辈好像也很看重她，经常下课后跟她一起留下来加练。',
+          '3L: 趁现在还没正式出道赶紧入股，以后绝对是百万直拍神颜！',
         ],
       },
       {
-        author: '大峙洞夜归人',
-        tag: '食堂与小卖部',
-        title: '今日食堂菜单红黑榜 & 广播室歌单好评',
-        content: '今天中午食堂的芝士辣炒鸡排给得超足！另外表白午休广播室李恩宇学长放的歌，写数学卷子的时候听完整个人都被治愈了。',
-        likes: 76,
+        author: '汉江夜跑偶遇者',
+        tag: '📸 偶遇爆料',
+        title: '某人气练习生被拍到傍晚在汉江边散步？氛围感像拍韩剧一样',
+        content: `刚在盘浦汉江公园买便利店拉面的时候，好像偶遇1-1班的李秀妍了（近期动态：${latestMem}）。晚风吹起校服百褶裙的样子完全就是青春电影女主角，旁边经过的路人都在偷偷回头看！`,
+        likes: 492,
         comments: [
-          '恩宇学长的选曲审美永远在线！',
-          '求问小卖部明天还会补货延世生牛乳奶油面包吗？',
+          '1L: 救命，光看文字描述就已经脑补出一整部浪漫韩剧了！',
+          '2L: 金智英已经在班群里认领了，说是放学去拍人生四格顺路散步哈哈。',
+          '3L: 颜值 ${stats?.appearance || 82} 分不是盖的，随便一拍都是画报级别。',
+        ],
+      },
+      {
+        author: '四大社企划情报站',
+        tag: '👑 顺位预测',
+        title: '[讨论] 本月出道预备役顺位预测贴 & 首尔女高校花榜更新',
+        content: `综合目前的声乐（${stats?.vocalSkill || 45}）、舞蹈（${stats?.danceSkill || 45}）与学业（${stats?.academics || 75}）表现，李秀妍不仅稳居企划社月度评价上位圈，连全校模拟考内申成绩都名列前茅，韩素拉都把她当成头号劲敌！`,
+        likes: 530,
+        comments: [
+          '1L: 颜值与实力并存的全能ACE，我投李秀妍一票！',
+          '2L: 听说广播社的李恩宇学长和学生会长尹在民都对她印象超好。',
+          '3L: 坐等月底公开考核舞台，已经准备好应援手幅了！',
         ],
       },
     ];
 
-    res.json({ posts: fallbackPosts.slice(0, 3) });
+    res.json({ posts: fallbackPosts.slice(0, 4) });
+  });
+
+  // 3.2 Stargram AI Real-time NPC Comments Generator
+  app.post('/api/ai/stargram-comments', async (req, res) => {
+    const { caption = '', tag = '', npcs = [], stats = {}, timeContext = '今天', systemPromptOverride } = req.body || {};
+
+    const systemPrompt =
+      systemPromptOverride ||
+      `${NPC_CHAT_LIVING_PERSONA_RULES}\n${ANTI_AI_STYLE_RULES}\n你是《韩国女高模拟器》中 Stargram 评论区的实时互动生成引擎。请根据动态内容生成3-4条来自好友、导师或竞争对手的8-22字简短评论，严禁复述原配文。`;
+    const userPrompt = `动态标签：${tag}，配文：“${caption}”，时间：${timeContext}，粉丝数：${stats?.snsFollowers || 1000}。请返回JSON格式：{ "comments": [{ "npcName": "角色名", "text": "评论内容" }] }`;
+
+    try {
+      const ai = getGenAIClient();
+      if (ai) {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: userPrompt,
+          config: {
+            systemInstruction: systemPrompt,
+            responseMimeType: 'application/json',
+            temperature: 0.85,
+          },
+        });
+        const text = response.text?.trim() || '';
+        const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const parsed = sanitizeAntiAIResponse(JSON.parse(cleaned));
+        if (parsed && Array.isArray(parsed.comments) && parsed.comments.length > 0) {
+          return res.json(parsed);
+        }
+      }
+    } catch (err) {
+      handleGenAIError(err);
+    }
+
+    const liveComments = await callLiveOpenAICompatibleLLM(systemPrompt, userPrompt);
+    if (liveComments && Array.isArray(liveComments.comments) && liveComments.comments.length > 0) {
+      return res.json(sanitizeAntiAIResponse(liveComments));
+    }
+
+    const fallbackList = [
+      { npcName: '金智英', text: '救命这张氛围感绝了！滤镜参数快交出来~' },
+      { npcName: '朴敏英', text: '已经第一时间点赞收藏设为壁纸啦 ❤️' },
+      { npcName: '千宥娜', text: '镜头表现力很稳，可以直接当出道预告照了。' },
+      { npcName: '企划社声乐导师', text: '状态不错，但明天早训的开声练习别迟到。' },
+    ];
+    if (Array.isArray(npcs)) {
+      const extraNpc = npcs.find((n: any) => n.isGenerated);
+      if (extraNpc) {
+        fallbackList[3] = {
+          npcName: extraNpc.chineseName,
+          text: '刚刷到你的新动态，今天状态看起来超好呢！',
+        };
+      }
+    }
+    return res.json({ comments: fallbackList });
+  });
+
+  // 3.3 AI Real-time Fan Bubble Private Messages Generator (/api/ai/fan-bubble)
+  app.post('/api/ai/fan-bubble', async (req, res) => {
+    const {
+      playerName = '李秀妍',
+      identityStatus = 'A班人气练习生',
+      recentSchedule = '刚完成公开舞台与考核直拍录制',
+      fanPersonas = ['【金牌站姐（数据女工）】', '【死忠老粉】', '【搞笑整活粉】'],
+      systemPromptOverride,
+    } = req.body || {};
+
+    const systemPrompt =
+      systemPromptOverride ||
+      `${ANTI_AI_STYLE_RULES}
+你是韩国追星应用 Bubble 的粉丝私信生成引擎。请扮演追星粉丝，结合主角【${playerName}】的当前身份状态（${identityStatus}）与最近一周行程成绩（${recentSchedule}），以 ${fanPersonas.join('、')} 的画像分类现场撰写 3 条极具饭圈真实感的私信。
+要求语气充满爱意、崇拜、心疼或幽默感（包含饭圈缩写、土味情话、感叹号与颜文字），严禁使用破折号。`;
+
+    const userPrompt = `请结合【身份状态：${identityStatus}】与【最近一周行程与成绩：${recentSchedule}】，生成 3 条粉丝私信 JSON：
+{
+  "messages": [
+    { "fanName": "粉丝昵称", "fanRole": "金牌站姐（数据女工）", "message": "私信内容", "loyaltyGain": 15 },
+    { "fanName": "粉丝昵称", "fanRole": "死忠老粉", "message": "私信内容", "loyaltyGain": 18 },
+    { "fanName": "粉丝昵称", "fanRole": "搞笑整活粉", "message": "私信内容", "loyaltyGain": 14 }
+  ]
+}`;
+
+    try {
+      const ai = getGenAIClient();
+      if (ai) {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: userPrompt,
+          config: {
+            systemInstruction: systemPrompt,
+            responseMimeType: 'application/json',
+            temperature: 0.88,
+          },
+        });
+        const text = response.text?.trim() || '';
+        const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const parsed = sanitizeAntiAIResponse(JSON.parse(cleaned));
+        const list = Array.isArray(parsed) ? parsed : parsed?.messages;
+        if (Array.isArray(list) && list.length > 0) {
+          return res.json({ messages: list });
+        }
+      }
+    } catch (err) {
+      handleGenAIError(err);
+    }
+
+    const liveResult = await callLiveOpenAICompatibleLLM(systemPrompt, userPrompt);
+    const liveList = Array.isArray(liveResult) ? liveResult : liveResult?.messages;
+    if (Array.isArray(liveList) && liveList.length > 0) {
+      return res.json(sanitizeAntiAIResponse({ messages: liveList }));
+    }
+
+    return res.json(
+      sanitizeAntiAIResponse({
+        messages: [
+          {
+            fanName: `@Sooyeon_Cam0321`,
+            fanRole: '金牌站姐（数据女工）',
+            message: `宝！！今天「${recentSchedule}」的高清4K竖屏直拍我已经修完发推了，转赞直接破万！！(≧∇≦)ﾉ 切拜选民们都来看看我们「${identityStatus}」${playerName}的神级表情管理吧！！数据组今晚继续通宵切瓜刷音源，${playerName}只管在舞台上闪闪发光！！❤️🔥`,
+            loyaltyGain: 15,
+          },
+          {
+            fanName: `陪伴${playerName}直到世界尽头`,
+            fanRole: '死忠老粉',
+            message: `呜呜呜我的小公主ㅠㅠ 看到你这周为了「${recentSchedule}」连轴转，镜头拉近的时候眼底都有点红血丝了，妈妈粉心疼得眼泪狂飙(T_T) 答应我今晚一定要吃顿热乎的韩牛补补身体，不管外界怎么说，老粉永远是你最硬的底气！！💖✨`,
+            loyaltyGain: 18,
+          },
+          {
+            fanName: `今天也在为${playerName}哐哐撞大墙`,
+            fanRole: '搞笑整活粉',
+            message: `救命啊警察叔叔！！这里有人在「${recentSchedule}」上用美貌纵火！！(*≧ω≦) ${playerName}你知道你今天犯了什么规吗？犯了让我一眼万年的心动规！！我已经把你的Ending妖精截图贴满宿舍床头了，宿管阿姨来了都夸绝绝子哈哈哈哈！！🎉💖`,
+            loyaltyGain: 14,
+          },
+        ],
+      })
+    );
+  });
+
+  // 3.4 AI Real-time Fan Bubble Reply Reaction Generator (/api/ai/fan-bubble-reply)
+  app.post('/api/ai/fan-bubble-reply', async (req, res) => {
+    const {
+      fanName = '@Sooyeon_Cam0321',
+      fanRole = '金牌站姐（数据女工）',
+      previousFanMessage = '',
+      playerReply = '谢谢你的支持呀❤️',
+      identityStatus = 'A班人气练习生',
+      recentSchedule = '舞台直拍录制',
+      baseLoyaltyGain = 15,
+      systemPromptOverride,
+    } = req.body || {};
+
+    const systemPrompt =
+      systemPromptOverride ||
+      `${ANTI_AI_STYLE_RULES}
+你是追星软件 Bubble 中的粉丝【${fanName}】（身份：【${fanRole}】）。你刚给爱豆发了私信：“${previousFanMessage}”，现在本尊竟然亲自回复了你：“${playerReply}”！
+请表现出狂喜、感动或语无伦次的即时反应（带感叹号与颜文字），拆分为 2-3 条短句气泡返回 JSON。`;
+
+    const userPrompt = `爱豆当前状态：${identityStatus}，近期行程：${recentSchedule}，爱豆回复了我：“${playerReply}”。请返回JSON：{ "replies": ["气泡1", "气泡2", "气泡3"], "emotionTag": "原地狂喜", "loyaltyGain": ${baseLoyaltyGain + 5}, "followerBonus": 180 }`;
+
+    try {
+      const ai = getGenAIClient();
+      if (ai) {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: userPrompt,
+          config: {
+            systemInstruction: systemPrompt,
+            responseMimeType: 'application/json',
+            temperature: 0.9,
+          },
+        });
+        const text = response.text?.trim() || '';
+        const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const parsed = sanitizeAntiAIResponse(JSON.parse(cleaned));
+        if (parsed && Array.isArray(parsed.replies) && parsed.replies.length > 0) {
+          return res.json(parsed);
+        }
+      }
+    } catch (err) {
+      handleGenAIError(err);
+    }
+
+    const liveReply = await callLiveOpenAICompatibleLLM(systemPrompt, userPrompt);
+    if (liveReply && Array.isArray(liveReply.replies) && liveReply.replies.length > 0) {
+      return res.json(sanitizeAntiAIResponse(liveReply));
+    }
+
+    const isStation = String(fanRole).includes('站姐');
+    const isFunny = String(fanRole).includes('整活') || String(fanRole).includes('搞笑');
+    const fallbackBubbles = isStation
+      ? [
+          `啊啊啊啊啊秀妍居然看到我的Bubble了？！手抖得修图笔都掉了！！(≧∇≦)ﾉ`,
+          `听到你这么说，蹲守下班路吹再久的冷风都值了ㅠㅠ`,
+          `今晚站子直接加抽100份应援礼盒，我们一辈子锁死！！📸❤️`,
+        ]
+      : isFunny
+      ? [
+          `救命！！我被本尊翻牌了？！妈妈快把我的族谱翻开，我要把这一页写进传家宝！！(*≧ω≦)`,
+          `此时此刻我已经在宿舍床上表演了三百六十度托马斯回旋狂喜！！`,
+          `秀妍放心飞，搞笑女永相随，冲鸭！！🎉💖`,
+        ]
+      : [
+          `呜呜呜眼泪直接飙出来了ㅠㅠ 没想到秀妍训练这么忙还特意回复我(T_T)`,
+          `你永远都是这么温柔又努力，入股李秀妍真是我这辈子最幸福的决定！！`,
+          `不管未来走多远，死忠粉永远在台下为你亮起最亮的应援棒！！💖✨`,
+        ];
+
+    return res.json({
+      replies: fallbackBubbles,
+      emotionTag: isStation ? '站姐狂喜修图' : isFunny ? '语无伦次整活' : '死忠粉暴风感动',
+      loyaltyGain: Number(baseLoyaltyGain) + 5,
+      followerBonus: 180,
+    });
   });
 
   // 3.5 AI-Assisted Trainee Survival Show, Monthly Evaluation, Fan Meeting & Debut Combat Generator
@@ -1751,6 +1992,82 @@ ${memText}
         summary: '两人从初次相识一路走来，在校园与首尔街头留下了许多温暖的共同回忆，彼此间的默契与信任正在悄然升温。',
         bondEvaluation: '羁绊持续升温中',
       });
+    }
+  });
+
+  // 10. Action Interactive Event + 3 Choices + Causal Narrative Generator
+  app.post('/api/ai/action-event', async (req, res) => {
+    const {
+      actionCategory = 'map_explore',
+      actionName = '校园探索',
+      location = '首尔女高',
+      stats = {},
+      npc,
+      baseDeltas = {},
+      baseFavDelta = 0,
+      timeContext = '首尔女高学期中',
+      systemPromptOverride,
+    } = req.body || {};
+
+    const npcName = npc?.chineseName || '朴敏英';
+    const npcRole = npc?.role || '同班同学';
+    const systemPrompt =
+      systemPromptOverride ||
+      `你是《韩国女高模拟器》的首席互动叙事导演。\n${ANTI_AI_STYLE_RULES}\n请为玩家在【${location}】进行的【${actionName}】生成一段60-100字极具画面感与冲突感的现场突发剧情描写，并提供3个不同性格倾向（激进表现 / 稳妥配合 / 摸鱼偷懒）的应对选项及因果后续微描写。`;
+    const userPrompt = `时间：${timeContext}，地点：${location}，正在执行：【${actionName}】（类别：${actionCategory}），在场NPC：${npcName}（${npcRole}）。请严格输出JSON对象（含 title, sceneDescription, choices 数组）。`;
+
+    try {
+      const ai = getGenAIClient();
+      if (ai) {
+        try {
+          const response = await ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: userPrompt,
+            config: {
+              systemInstruction: systemPrompt,
+              responseMimeType: 'application/json',
+              temperature: 0.85,
+            },
+          });
+          const text = response.text?.trim() || '';
+          const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+          const parsed = sanitizeAntiAIResponse(JSON.parse(cleaned));
+          if (parsed && parsed.sceneDescription && Array.isArray(parsed.choices) && parsed.choices.length >= 2) {
+            return res.json(parsed);
+          }
+        } catch (err) {
+          handleGenAIError(err);
+        }
+      }
+
+      try {
+        const liveData = await callLiveOpenAICompatibleLLM(systemPrompt, userPrompt);
+        if (liveData && liveData.sceneDescription && Array.isArray(liveData.choices) && liveData.choices.length >= 2) {
+          return res.json(sanitizeAntiAIResponse(liveData));
+        }
+      } catch (_e) {}
+
+      return res.json(
+        buildLocalActionInteractiveFallback({
+          actionCategory,
+          actionName,
+          location,
+          npc,
+          baseDeltas,
+          baseFavDelta,
+        })
+      );
+    } catch (_err) {
+      return res.json(
+        buildLocalActionInteractiveFallback({
+          actionCategory,
+          actionName,
+          location,
+          npc,
+          baseDeltas,
+          baseFavDelta,
+        })
+      );
     }
   });
 

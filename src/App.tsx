@@ -19,7 +19,13 @@ import {
   WeeklyExecutionSummary,
   PlayerTrait,
   DynamicNPCEncounter,
+  FanBubbleThread,
+  PlayerAssetsState,
+  FamilyMilestoneItem,
 } from './types';
+import { AssetsModal } from './components/modals/AssetsModal';
+import { FamilyModal } from './components/modals/FamilyModal';
+import { HOUSING_PRESETS, VEHICLE_PRESETS } from './data/assetsData';
 import {
   initialStats,
   initialNPCs,
@@ -40,6 +46,10 @@ import {
   generateDynamicCampusEvent,
   generateDynamicNarrative,
   generateNewNPCEncounter,
+  generateActionInteractiveEvent,
+  generateFanBubbleMessages,
+  ActionEventCategory,
+  ActionInteractiveChoice,
 } from './services/aiService';
 import {
   convertEncounterToNPC,
@@ -47,6 +57,7 @@ import {
 } from './data/encounterData';
 
 import { WeeklySchedulerModal } from './components/modals/WeeklySchedulerModal';
+import { TimeSkipSummaryModal } from './components/modals/TimeSkipSummaryModal';
 import { EncounterModal } from './components/modals/EncounterModal';
 import { TimetableModal } from './components/modals/TimetableModal';
 import { ClubModal } from './components/modals/ClubModal';
@@ -101,9 +112,124 @@ export default function App() {
 
   const [npcs, setNpcs] = useState<NPCClassmate[]>(initialNPCs);
   const [discoveredNpcList, setDiscoveredNpcList] = useState<NPCClassmate[]>([]);
+  const [triggeredEventHistory, setTriggeredEventHistory] = useState<string[]>([]);
+  const [weeklyCompletedActions, setWeeklyCompletedActions] = useState<string[]>([]);
   const [wardrobe, setWardrobe] = useState<WardrobeItem[]>(initialWardrobe);
   const [memories, setMemories] = useState<MemoryEntry[]>(initialMemories);
   const [examRecords, setExamRecords] = useState<ExamRecord[]>([]);
+  const [unreportedMilestones, setUnreportedMilestones] = useState<FamilyMilestoneItem[]>(() => {
+    const saved = localStorage.getItem('seoul_unreported_milestones');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return [
+      {
+        id: 'm_init_enrollment',
+        title: '成功考入首尔女子高中 1-1 班',
+        categoryLabel: '入学捷报',
+        rewardCoins: 30000,
+        newsSummary: '正式踏入首尔女子高中校门，开启精彩高中三年人生篇章！',
+        createdAtStr: '高1第1周',
+      },
+    ];
+  });
+
+  const addFamilyMilestone = (title: string, categoryLabel: string, rewardCoins: number, newsSummary: string) => {
+    const id = `milestone_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const newItem: FamilyMilestoneItem = {
+      id,
+      title,
+      categoryLabel,
+      rewardCoins,
+      newsSummary,
+      createdAtStr: `高${gradeYear}第${weekInYear}周`,
+    };
+    setUnreportedMilestones((prev) => {
+      const updated = [newItem, ...prev];
+      localStorage.setItem('seoul_unreported_milestones', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleClaimMilestone = (milestoneId: string, rewardCoins: number, newsSummary: string) => {
+    applyDeltaStats({
+      coins: rewardCoins,
+      allowance: 2000,
+      family: 15,
+      mood: 15,
+    });
+    setUnreportedMilestones((prev) => {
+      const updated = prev.filter((m) => m.id !== milestoneId);
+      localStorage.setItem('seoul_unreported_milestones', JSON.stringify(updated));
+      return updated;
+    });
+    addGlobalMemory(`向家里报喜：${newsSummary}，父母骄傲地奖赏了 ₩${rewardCoins.toLocaleString()}。`, 'family');
+  };
+  const [playerAssets, setPlayerAssets] = useState<PlayerAssetsState>(() => {
+    const saved = localStorage.getItem('seoul_player_assets');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return {
+      currentHousingId: 'housing_semi_basement',
+      currentVehicleId: 'vehicle_subway',
+      ownedHousingIds: ['housing_semi_basement'],
+      ownedVehicleIds: ['vehicle_subway'],
+    };
+  });
+
+  const handleBuyHousing = (housingId: string, price: number) => {
+    if (stats.coins < price) return;
+    updateStats({ coins: -price });
+    setPlayerAssets((prev) => {
+      const updated = {
+        ...prev,
+        currentHousingId: housingId,
+        ownedHousingIds: prev.ownedHousingIds.includes(housingId)
+          ? prev.ownedHousingIds
+          : [...prev.ownedHousingIds, housingId],
+      };
+      localStorage.setItem('seoul_player_assets', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleSelectHousing = (housingId: string) => {
+    setPlayerAssets((prev) => {
+      const updated = { ...prev, currentHousingId: housingId };
+      localStorage.setItem('seoul_player_assets', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleBuyVehicle = (vehicleId: string, price: number) => {
+    if (stats.coins < price) return;
+    updateStats({ coins: -price });
+    setPlayerAssets((prev) => {
+      const updated = {
+        ...prev,
+        currentVehicleId: vehicleId,
+        ownedVehicleIds: prev.ownedVehicleIds.includes(vehicleId)
+          ? prev.ownedVehicleIds
+          : [...prev.ownedVehicleIds, vehicleId],
+      };
+      localStorage.setItem('seoul_player_assets', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleSelectVehicle = (vehicleId: string) => {
+    setPlayerAssets((prev) => {
+      const updated = { ...prev, currentVehicleId: vehicleId };
+      localStorage.setItem('seoul_player_assets', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const [snsPosts, setSnsPosts] = useState<SNSPost[]>([
     {
       id: 'sns_init_1',
@@ -120,6 +246,133 @@ export default function App() {
   ]);
   const [unlockedEndingIds, setUnlockedEndingIds] = useState<string[]>([]);
   const [chatHistories, setChatHistories] = useState<Record<string, ChatMessage[]>>({});
+  const [recentScheduleSummary, setRecentScheduleSummary] = useState<string>(
+    '刚在首尔女高周考中表现惊艳，并在企划社公开练习室完成4K竖屏直拍录制'
+  );
+  const [fanBubbleThreads, setFanBubbleThreads] = useState<FanBubbleThread[]>(() => [
+    {
+      id: 'fan_init_station',
+      fanName: '@Sooyeon_Cam0321',
+      fanRole: '金牌站姐（数据女工）',
+      avatarEmoji: '📸',
+      badgeColor: 'bg-amber-100 text-amber-800 border-amber-300',
+      loyalty: 85,
+      pendingLoyaltyGain: 15,
+      hasUnread: true,
+      unreadCount: 1,
+      updatedAtLabel: '刚刚 · 新来信',
+      messages: [
+        {
+          sender: 'fan',
+          text: '宝！！今天公开练习室的4K竖屏直拍我已经精修完发推了，十分钟转赞破五千！！(≧∇≦)ﾉ 数据组今晚继续通宵切瓜刷榜，秀妍只管在舞台上闪闪发光！！❤️🔥',
+          timeLabel: '10:15',
+        },
+      ],
+    },
+    {
+      id: 'fan_init_loyal',
+      fanName: '陪伴秀妍直到世界尽头',
+      fanRole: '死忠老粉',
+      avatarEmoji: '💖',
+      badgeColor: 'bg-rose-100 text-rose-800 border-rose-300',
+      loyalty: 92,
+      pendingLoyaltyGain: 18,
+      hasUnread: true,
+      unreadCount: 1,
+      updatedAtLabel: '2分钟前',
+      messages: [
+        {
+          sender: 'fan',
+          text: '呜呜呜我的小公主ㅠㅠ 看到你这周兼顾学业和声乐刀群舞训练连轴转，镜头拉近的时候都瘦了一圈，妈妈粉心疼得眼泪狂飙(T_T) 今晚一定要吃顿热乎的韩牛补补身体呀！！💖✨',
+          timeLabel: '10:12',
+        },
+      ],
+    },
+    {
+      id: 'fan_init_funny',
+      fanName: '今天也在为秀妍哐哐撞大墙',
+      fanRole: '搞笑整活粉',
+      avatarEmoji: '🤣',
+      badgeColor: 'bg-purple-100 text-purple-800 border-purple-300',
+      loyalty: 78,
+      pendingLoyaltyGain: 14,
+      hasUnread: true,
+      unreadCount: 1,
+      updatedAtLabel: '5分钟前',
+      messages: [
+        {
+          sender: 'fan',
+          text: '救命啊警察叔叔！！这里有人在舞台上用美貌纵火！！(*≧ω≦) 秀妍你知道你今天犯了什么规吗？犯了让我一眼万年的心动规！！我已经把你的Ending妖精截图贴满宿舍床头了哈哈哈哈！！🎉💖',
+          timeLabel: '10:08',
+        },
+      ],
+    },
+  ]);
+
+  const refreshGlobalFanBubbleMessages = async (
+    scheduleDesc: string,
+    overrideStats?: GameStats,
+    weekContextLabel?: string
+  ) => {
+    const curStats = overrideStats || stats;
+    setRecentScheduleSummary(scheduleDesc);
+    const identityStatus =
+      curStats.darkIndex >= 45
+        ? '陷入热议舆论风波却凭神级舞台逆风翻盘的话题焦点'
+        : curStats.isDebutedIdol && curStats.snsFollowers >= 35000
+        ? '横扫韩网音源榜与打歌一位的当红顶流女团Center'
+        : curStats.isDebutedIdol
+        ? '刚出道的 A 班怪兽新人爱豆'
+        : curStats.traineeGrade?.includes('A')
+        ? '企划社公开企划 A 班王牌新人练习生'
+        : '首尔女高颜值与实力兼备的人气练习生';
+
+    try {
+      const items = await generateFanBubbleMessages({
+        identityStatus,
+        recentSchedule: scheduleDesc,
+        fanPersonas: ['【金牌站姐（数据女工）】', '【死忠老粉】', '【搞笑整活粉】'],
+        playerName: protagonistName,
+        stats: curStats,
+        weekLabel: weekContextLabel || `高${gradeYear}第${weekInYear}周`,
+        aiConfig,
+      });
+      if (Array.isArray(items) && items.length > 0) {
+        const nowStamp = Date.now();
+        const timeStr = `${String(Math.floor(clockMinutes / 60)).padStart(2, '0')}:${String(
+          clockMinutes % 60
+        ).padStart(2, '0')}`;
+        const freshThreads: FanBubbleThread[] = items.slice(0, 3).map((item, idx) => {
+          const isStation = item.fanRole.includes('站姐');
+          const isFunny = item.fanRole.includes('搞笑') || item.fanRole.includes('整活');
+          return {
+            id: `fan_ai_${nowStamp}_${idx}`,
+            fanName: item.fanName,
+            fanRole: item.fanRole,
+            avatarEmoji: isStation ? '📸' : isFunny ? '🤣' : '💖',
+            badgeColor: isStation
+              ? 'bg-amber-100 text-amber-800 border-amber-300'
+              : isFunny
+              ? 'bg-purple-100 text-purple-800 border-purple-300'
+              : 'bg-rose-100 text-rose-800 border-rose-300',
+            loyalty: isStation ? 86 : isFunny ? 79 : 93,
+            pendingLoyaltyGain: item.loyaltyGain || 15,
+            hasUnread: true,
+            unreadCount: 1,
+            updatedAtLabel: '刚刚 · 新粉丝来信',
+            messages: [
+              {
+                sender: 'fan',
+                text: item.message,
+                timeLabel: timeStr,
+              },
+            ],
+          };
+        });
+        setFanBubbleThreads((prev) => [...freshThreads, ...prev.slice(0, 6)]);
+      }
+    } catch (_e) {}
+  };
 
   const [lastJobTurnKey, setLastJobTurnKey] = useState<string>(() => {
     return localStorage.getItem('seoul_last_job_turn') || '';
@@ -134,11 +387,18 @@ export default function App() {
   const handleRecordJobDone = () => {
     setLastJobTurnKey(currentTurnKey);
     localStorage.setItem('seoul_last_job_turn', currentTurnKey);
+    markWeeklyActionCompleted('weekly_parttime_or_endorsement');
   };
 
   const handleRecordExamDone = () => {
     setLastExamKey(currentWeekKey);
     localStorage.setItem('seoul_last_exam_key', currentWeekKey);
+    markWeeklyActionCompleted('weekly_mock_exam');
+  };
+
+  const markWeeklyActionCompleted = (actionKey: string) => {
+    if (!actionKey) return;
+    setWeeklyCompletedActions((prev) => (prev.includes(actionKey) ? prev : [...prev, actionKey]));
   };
 
   const [diaryEntries, setDiaryEntries] = useState<DiaryEntry[]>(() => {
@@ -191,12 +451,21 @@ export default function App() {
   const [aiConfig, setAiConfig] = useState<AIConfig>(defaultAIConfig);
 
   const [activeModal, setActiveModal] = useState<string | null>(null);
+  const [timeSkipTarget, setTimeSkipTarget] = useState<{ year: number; week: number } | null>(null);
   const [activeEvent, setActiveEvent] = useState<RandomEvent | null>(null);
   const [targetNpcId, setTargetNpcId] = useState<string>(initialNPCs[0].id);
   const [portraitWorkshopNpcId, setPortraitWorkshopNpcId] = useState<string | undefined>(undefined);
   const [pendingRelationshipChange, setPendingRelationshipChange] =
     useState<RelationshipChangePromptData | null>(null);
   const [isGeneratingAIEvent, setIsGeneratingAIEvent] = useState<boolean>(false);
+  const [eventLoadingContext, setEventLoadingContext] = useState<{
+    year: number;
+    week: number;
+    seasonName: string;
+    location: string;
+    npcName: string;
+    npcRole: string;
+  } | null>(null);
   const [choiceResultData, setChoiceResultData] = useState<ChoiceResultData | null>(null);
   const [activeEncounter, setActiveEncounter] = useState<DynamicNPCEncounter | null>(null);
   const [snsInitialTab, setSnsInitialTab] = useState<'desktop' | 'stargram' | 'kakao'>('desktop');
@@ -265,6 +534,12 @@ export default function App() {
           setDiscoveredNpcList(parsed.discoveredNpcList);
           setNpcs([...initialNPCs, ...parsed.discoveredNpcList]);
         }
+        if (Array.isArray(parsed.triggeredEventHistory)) {
+          setTriggeredEventHistory(parsed.triggeredEventHistory);
+        }
+        if (Array.isArray(parsed.weeklyCompletedActions)) {
+          setWeeklyCompletedActions(parsed.weeklyCompletedActions);
+        }
         if (parsed.wardrobe) setWardrobe(parsed.wardrobe);
         if (parsed.memories) setMemories(parsed.memories);
         if (parsed.examRecords) setExamRecords(parsed.examRecords);
@@ -292,6 +567,8 @@ export default function App() {
         protagonistAvatarUrl,
         npcs,
         discoveredNpcList,
+        triggeredEventHistory,
+        weeklyCompletedActions,
         wardrobe,
         memories,
         examRecords,
@@ -315,6 +592,8 @@ export default function App() {
     protagonistAvatarUrl,
     npcs,
     discoveredNpcList,
+    triggeredEventHistory,
+    weeklyCompletedActions,
     wardrobe,
     memories,
     examRecords,
@@ -403,6 +682,22 @@ export default function App() {
   };
 
   const applyDeltaStats = (delta: Partial<GameStats>) => {
+    if (delta.isDebutedIdol && !stats.isDebutedIdol) {
+      addFamilyMilestone(
+        '正式通关选秀终审 C位出道成为 Idol',
+        '爱豆荣耀',
+        100000,
+        '正式通过企划社高管终审考察，作为全新女团 C位荣耀出道！'
+      );
+    } else if (delta.traineeGrade && delta.traineeGrade.includes('A') && !stats.traineeGrade?.includes('A')) {
+      addFamilyMilestone(
+        '企划社月度评级晋升为 A班 ACE',
+        '选秀晋升',
+        50000,
+        '在企划社残酷月末评级中夺得全场第一，顺利升入 A 班！'
+      );
+    }
+
     setStats((prev) => ({
       ...prev,
       mood: Math.min(100, Math.max(0, prev.mood + (delta.mood || 0))),
@@ -523,38 +818,142 @@ export default function App() {
     });
   };
 
-  const handleExecuteMapAction = (action: MapActionItem, loc: MapLocationInfo) => {
-    const deltaEffect = { ...action.effect };
-    if (action.costCoins) {
-      deltaEffect.coins = (deltaEffect.coins || 0) - action.costCoins;
+  // Unified 3-Step AI Interactive Action Event Loop (Step 1: Loading -> Step 2: 2-3 AI Choices -> Step 3: Causal Follow-up & Settlement)
+  const handleTriggerActionInteractiveEvent = async (params: {
+    actionCategory: ActionEventCategory;
+    actionName: string;
+    locationName: string;
+    baseStaminaCost: number;
+    baseCoinsCost?: number;
+    weeklyActionKey: string;
+    featuredNpc?: NPCClassmate;
+    extraContext?: string;
+    onAfterConfirm?: (choice: ActionInteractiveChoice) => void;
+  }) => {
+    if (params.weeklyActionKey && weeklyCompletedActions.includes(params.weeklyActionKey)) {
+      showNotification('本周已完成该项行动（下周重置）！');
+      return;
     }
-    if (action.costStamina) {
-      deltaEffect.stamina = (deltaEffect.stamina || 0) - action.costStamina;
+    if (params.baseStaminaCost > 0 && stats.stamina < params.baseStaminaCost) {
+      showNotification(`体力不足 ${params.baseStaminaCost} 点，请先休息或去食堂补充体力！`);
+      return;
+    }
+    if (params.baseCoinsCost && params.baseCoinsCost > 0 && stats.coins < params.baseCoinsCost) {
+      showNotification(`韩元余额不足 ₩${params.baseCoinsCost.toLocaleString()}！`);
+      return;
     }
 
-    const targetNpc = action.favNpcId ? npcs.find((n) => n.id === action.favNpcId) : undefined;
-    const favArr = action.favNpcId && action.favDelta
-      ? [{ npcId: action.favNpcId, npcName: targetNpc?.chineseName || action.favNpcId, amount: action.favDelta }]
-      : [];
+    const validNpcs = npcs.length > 0 ? npcs : initialNPCs;
+    const chosenNpc =
+      params.featuredNpc ||
+      validNpcs[Math.floor(Math.random() * validNpcs.length)] ||
+      selectedNpc;
 
-    const memText = `[高${gradeYear}第${weekInYear}周·${loc.name}] ${action.memoryLog}`;
-
+    // Step 1: Immediately open modal in loading state ("AI 正在推演现场剧情...")
     setChoiceResultData({
-      title: `地图行动结算说明 · 【${loc.name} - ${action.name}】`,
-      description: action.successMessage || `你在【${loc.name}】进行了【${action.name}】，度过了一段充实的时光。`,
-      deltas: deltaEffect,
-      favorabilityChanges: favArr,
-      memoryLog: memText,
-      onConfirm: () => {
-        applyDeltaStats(deltaEffect);
-        if (action.favNpcId && action.favDelta) {
-          updateFavorability(action.favNpcId, action.favDelta, action.romanceDelta || 3);
-          addNpcMemory(action.favNpcId, memText);
-        } else {
-          addGlobalMemory(memText, 'life');
+      title: `行动现场推演 · ${params.actionName}`,
+      description: 'AI 正在推演现场剧情...',
+      deltas: {},
+      isLoading: true,
+      loadingActionName: params.actionName,
+      loadingLocationName: params.locationName,
+      loadingNpcName: chosenNpc?.chineseName,
+      onConfirm: () => setChoiceResultData(null),
+    });
+
+    // Step 2: Call aiService.ts (with timeout & local high-drama 3-choice fallback)
+    const interactiveEvent = await generateActionInteractiveEvent({
+      aiConfig,
+      actionCategory: params.actionCategory,
+      actionName: params.actionName,
+      location: params.locationName,
+      stats,
+      gradeYear,
+      weekInYear,
+      seasonLabel: weekInfo.seasonName,
+      protagonistName,
+      featuredNpc: chosenNpc,
+      triggeredEventHistory,
+      extraContext: params.extraContext,
+    });
+
+    recordTriggeredEvent(undefined, interactiveEvent.title);
+
+    // Step 2 -> Step 3: Present choices, then causal follow-up & confirm settlement
+    setChoiceResultData({
+      title: interactiveEvent.title,
+      description: interactiveEvent.sceneDescription,
+      deltas: {},
+      isLoading: false,
+      interactiveEvent,
+      onConfirm: () => setChoiceResultData(null),
+      onConfirmInteractiveChoice: (selectedChoice) => {
+        const finalDeltas: Partial<GameStats> = { ...selectedChoice.deltas };
+
+        // Ensure base stamina cost is accounted for if choice didn't already deduct or restore stamina
+        if (params.baseStaminaCost > 0 && finalDeltas.stamina === undefined) {
+          finalDeltas.stamina = -params.baseStaminaCost;
         }
+        // Ensure base coins cost is accounted for if applicable
+        if (params.baseCoinsCost && params.baseCoinsCost > 0) {
+          finalDeltas.coins = (finalDeltas.coins || 0) - params.baseCoinsCost;
+        }
+
+        applyDeltaStats(finalDeltas);
+        setLocation(params.locationName);
+
+        const memStr =
+          selectedChoice.memoryLog ||
+          `[高${gradeYear}第${weekInYear}周·${params.locationName}] 在【${params.actionName}】中选择了「${selectedChoice.text}」。`;
+
+        if (selectedChoice.favChange && selectedChoice.favChange.npcId) {
+          updateFavorability(selectedChoice.favChange.npcId, selectedChoice.favChange.amount, 6);
+          addNpcMemory(selectedChoice.favChange.npcId, memStr);
+        } else {
+          addGlobalMemory(memStr, 'life');
+        }
+
+        if (params.weeklyActionKey) {
+          markWeeklyActionCompleted(params.weeklyActionKey);
+        }
+
+        if (params.onAfterConfirm) {
+          params.onAfterConfirm(selectedChoice);
+        }
+
         setChoiceResultData(null);
+        showNotification(`✨ 已完成【${params.actionName}】抉择结算！`);
+
+        // Automatically generate new AI Fan Bubble DMs after completing trainee stages, evaluations, or endorsements
+        if (
+          params.actionCategory === 'trainee_eval' ||
+          params.actionCategory === 'trainee_practice' ||
+          params.actionCategory === 'part_time_job' ||
+          params.actionName.includes('舞台') ||
+          params.actionName.includes('考核') ||
+          params.actionName.includes('代言') ||
+          params.actionName.includes('通告') ||
+          params.actionName.includes('打歌')
+        ) {
+          refreshGlobalFanBubbleMessages(
+            `刚完成「${params.actionName}」（${selectedChoice.text}），现场表现引发饭圈热议`
+          );
+        }
       },
+    });
+  };
+
+  const handleExecuteMapAction = (action: MapActionItem, loc: MapLocationInfo) => {
+    const targetNpc = action.favNpcId ? npcs.find((n) => n.id === action.favNpcId) : undefined;
+    handleTriggerActionInteractiveEvent({
+      actionCategory: 'map_explore',
+      actionName: `${loc.name} · ${action.name}`,
+      locationName: loc.name,
+      baseStaminaCost: action.costStamina || 0,
+      baseCoinsCost: action.costCoins || 0,
+      weeklyActionKey: `weekly_map_${action.id}`,
+      featuredNpc: targetNpc,
+      extraContext: `${action.desc}（${action.successMessage || ''}）`,
     });
   };
 
@@ -715,6 +1114,16 @@ export default function App() {
       family: familyDelta,
       mood: gradeRank <= 2 ? 10 : -4,
     });
+
+    if (gradeRank <= 2 || scholarship > 0) {
+      addFamilyMilestone(
+        `【${examTitles[examType]}】考出 ${score}分（${gradeRank}等级）`,
+        '学业考捷报',
+        scholarship > 0 ? scholarship + 20000 : 35000,
+        `在【${examTitles[examType]}】中斩获${gradeRank}等级，名列全校前茅！`
+      );
+    }
+
     addGlobalMemory(`参加【${examTitles[examType]}】考出 ${score}分（${gradeRank}等级），${evaluation}。`, 'exam');
 
     return newRecord;
@@ -742,7 +1151,20 @@ export default function App() {
       });
     }
 
-    // 2. Ensure stamina floor
+    // 2. Ensure stamina floor and apply housing/vehicle per-turn bonuses
+    const curHousing = HOUSING_PRESETS.find((h) => h.id === playerAssets.currentHousingId);
+    if (curHousing) {
+      if (curHousing.staminaBonusPerTurn > 0) {
+        combinedDeltas.stamina = (combinedDeltas.stamina || 0) + curHousing.staminaBonusPerTurn;
+      }
+      if (curHousing.moodBonusPerTurn > 0) {
+        combinedDeltas.mood = (combinedDeltas.mood || 0) + curHousing.moodBonusPerTurn;
+      }
+      if (curHousing.darkIndexReductionPerTurn > 0) {
+        combinedDeltas.darkIndex = (combinedDeltas.darkIndex || 0) - curHousing.darkIndexReductionPerTurn;
+      }
+    }
+
     if (stats.stamina + (combinedDeltas.stamina || 0) < 12) {
       combinedDeltas.stamina = 25;
       combinedDeltas.mood = (combinedDeltas.mood || 0) - 3;
@@ -786,58 +1208,104 @@ export default function App() {
     setGradeYear(nextYear);
     setWeekInYear(nextWeek);
     setDayInWeek(0);
+    // Reset all weekly action cooldown locks when advancing to the next week (week + 1)
+    setWeeklyCompletedActions([]);
+    setChoiceResultData(null);
 
     const nextWeekInfo = getWeekCalendarInfo(nextYear, nextWeek);
-    const ev = pickWeeklyEvent({
+    // Automatically refresh AI Fan Bubble DMs when advancing to a new week
+    refreshGlobalFanBubbleMessages(
+      `顺利推进至高${nextYear}第${nextWeek}周，完成了充实的周间训练与学业行程${examNotice ? `（${examNotice.replace(' | 📢 ', '')}）` : ''}`,
+      undefined,
+      `高${nextYear}第${nextWeek}周`
+    );
+    // 100% prioritize AI real-time generation when advancing to the new week
+    handleTriggerEvent(undefined, {
       year: nextYear,
       week: nextWeek,
       season: nextWeekInfo.season,
-      stats,
-      npcs,
+      seasonName: nextWeekInfo.seasonName,
     });
-    setActiveEvent(ev);
-    setChoiceResultData(null);
   };
 
-  // Trigger Event from 220+ Pool or AI Engine
-  const handleTriggerEvent = async (customPrompt?: string) => {
-    if (customPrompt) {
-      setIsGeneratingAIEvent(true);
-      try {
-        const recentMemStrings = memories.slice(-8).map((m) => `[${m.dateStr}] ${m.summary}`);
-        const ev = await generateDynamicCampusEvent({
-          aiConfig,
-          stats,
-          location,
-          timeContext: timeContextStr,
-          npcs,
-          recentMemories: recentMemStrings,
-          customPrompt,
-        });
-        setActiveEvent(ev);
-      } catch (_e) {
-        const fallbackEv = pickWeeklyEvent({
-          year: gradeYear,
-          week: weekInYear,
-          season: weekInfo.season,
-          stats,
-          npcs,
-        });
-        setActiveEvent(fallbackEv);
-      } finally {
-        setIsGeneratingAIEvent(false);
+  // Record event ID & title into triggeredEventHistory deduplication ledger
+  const recordTriggeredEvent = (eventId?: string, eventTitle?: string) => {
+    setTriggeredEventHistory((prev) => {
+      const next = [...prev];
+      if (eventId && !next.includes(eventId)) {
+        next.push(eventId);
       }
-      return;
-    }
-
-    const ev = pickWeeklyEvent({
-      year: gradeYear,
-      week: weekInYear,
-      season: weekInfo.season,
-      stats,
-      npcs,
+      if (eventTitle && !next.includes(eventTitle)) {
+        next.push(eventTitle);
+      }
+      return next.slice(-80);
     });
-    setActiveEvent(ev);
+  };
+
+  // 100% Prioritize Real-Time AI Event Generation (Fallback to deduplicated static pool ONLY if offline/error)
+  const handleTriggerEvent = async (
+    customPrompt?: string,
+    overrideCtx?: {
+      year: number;
+      week: number;
+      season: import('./types').SeasonType;
+      seasonName: string;
+    }
+  ) => {
+    const targetYear = overrideCtx?.year ?? gradeYear;
+    const targetWeek = overrideCtx?.week ?? weekInYear;
+    const targetSeason = overrideCtx?.season ?? weekInfo.season;
+    const targetSeasonName = overrideCtx?.seasonName ?? weekInfo.seasonName;
+
+    // Pick 1 real discovered/known NPC and their memories to anchor the event
+    const validNpcs = npcs.length > 0 ? npcs : initialNPCs;
+    const featuredNpc = validNpcs[Math.floor(Math.random() * validNpcs.length)] || validNpcs[0];
+
+    setActiveEvent(null);
+    setEventLoadingContext({
+      year: targetYear,
+      week: targetWeek,
+      seasonName: targetSeasonName,
+      location,
+      npcName: featuredNpc.chineseName,
+      npcRole: featuredNpc.role,
+    });
+    setIsGeneratingAIEvent(true);
+
+    try {
+      const recentMemStrings = memories.slice(-8).map((m) => `[${m.dateStr}] ${m.summary}`);
+      const ev = await generateDynamicCampusEvent({
+        aiConfig,
+        stats,
+        location,
+        timeContext: `${2024 + targetYear}年 高${targetYear}第${targetWeek}周 (${targetSeasonName})`,
+        npcs: validNpcs,
+        recentMemories: recentMemStrings,
+        gradeYear: targetYear,
+        weekInYear: targetWeek,
+        seasonLabel: targetSeasonName,
+        triggeredEventHistory,
+        featuredNpc,
+        customPrompt,
+      });
+      recordTriggeredEvent(ev.id, ev.title);
+      setActiveEvent(ev);
+    } catch (_e) {
+      // Final fallback ONLY when completely offline or API error, strictly filtering triggeredEventHistory
+      const fallbackEv = pickWeeklyEvent({
+        year: targetYear,
+        week: targetWeek,
+        season: targetSeason,
+        stats,
+        npcs: validNpcs,
+        triggeredEventHistory,
+      });
+      recordTriggeredEvent(fallbackEv.id, fallbackEv.title);
+      setActiveEvent(fallbackEv);
+    } finally {
+      setIsGeneratingAIEvent(false);
+      setEventLoadingContext(null);
+    }
   };
 
   const handleCycleLocation = () => {
@@ -964,6 +1432,8 @@ export default function App() {
     setDayInWeek(0);
     setNpcs(initialNPCs);
     setDiscoveredNpcList([]);
+    setTriggeredEventHistory([]);
+    setWeeklyCompletedActions([]);
     setMemories(initialMemories);
     setExamRecords([]);
     showNotification('✨ 已开启新周目（2025年高一第1学期·第1周），已解锁的13大结局图鉴与衣橱已保留！');
@@ -1094,16 +1564,55 @@ export default function App() {
           gradeYear={gradeYear}
           weekInYear={weekInYear}
           stats={stats}
+          npcs={npcs}
+          triggeredEventHistory={triggeredEventHistory}
+          onRecordTriggeredEvent={recordTriggeredEvent}
           aiConfig={aiConfig}
           onCompleteWeeklyExecution={handleCompleteWeeklyExecution}
+          onOpenTimeSkipSummary={(targetYr, targetWk) => {
+            setTimeSkipTarget({ year: targetYr, week: targetWk });
+            setActiveModal('timeSkipSummary');
+          }}
           onAddNewNPC={handleAddNewNPC}
           onNotify={showNotification}
           onJumpToWeek={(targetYr, targetWk, label) => {
             setGradeYear(targetYr);
             setWeekInYear(targetWk);
             setDayInWeek(0);
+            setWeeklyCompletedActions([]);
             setActiveModal(null);
             showNotification(label);
+          }}
+        />
+      )}
+
+      {/* 1.5 Time Skip x4 Weeks Summary Journal Modal */}
+      {activeModal === 'timeSkipSummary' && timeSkipTarget && (
+        <TimeSkipSummaryModal
+          onClose={() => {
+            setActiveModal(null);
+            setTimeSkipTarget(null);
+          }}
+          startWeekLabel={`高${gradeYear}第${weekInYear}周`}
+          endWeekLabel={`高${timeSkipTarget.year}第${timeSkipTarget.week}周`}
+          targetYear={timeSkipTarget.year}
+          targetWeek={timeSkipTarget.week}
+          stats={stats}
+          protagonistName={protagonistName}
+          aiConfig={aiConfig}
+          onConfirmJump={(deltaStats, memoirText) => {
+            applyDeltaStats(deltaStats);
+            setGradeYear(timeSkipTarget.year);
+            setWeekInYear(timeSkipTarget.week);
+            setDayInWeek(0);
+            setWeeklyCompletedActions([]);
+            addGlobalMemory(
+              `在【高${gradeYear}第${weekInYear}周】至【高${timeSkipTarget.year}第${timeSkipTarget.week}周】完成四周期刊极速跃迁：${memoirText.slice(0, 45)}...`,
+              'life'
+            );
+            showNotification(`✨ 4 周极速跃迁圆满完成！正式踏入高${timeSkipTarget.year}第${timeSkipTarget.week}周新征程！`);
+            setActiveModal(null);
+            setTimeSkipTarget(null);
           }}
         />
       )}
@@ -1115,15 +1624,15 @@ export default function App() {
           stats={stats}
           currentDay={currentDayCount}
           clockMinutes={clockMinutes}
+          weeklyCompletedActions={weeklyCompletedActions}
           onAttendClass={(subject) => {
-            if (stats.stamina < 10) {
-              showNotification('体力不足，请先在周行动中安排休息或去食堂补充体力！');
-              return;
-            }
-            applyDeltaStats({ academics: 4, stamina: -10, mood: 2, family: 2 });
-            setLocation('1-1 教室');
-            addGlobalMemory(`专心完成了【${subject}】强化学习，内申评价提升。`, 'life');
-            showNotification(`完成了【${subject}】专修：学业 +4，家庭关系 +2！`);
+            handleTriggerActionInteractiveEvent({
+              actionCategory: 'class_study',
+              actionName: `课堂专修：${subject}`,
+              locationName: '首尔女高 · 1-1班教室',
+              baseStaminaCost: 10,
+              weeklyActionKey: `weekly_class_${subject}`,
+            });
           }}
         />
       )}
@@ -1133,7 +1642,20 @@ export default function App() {
         <ClubModal
           onClose={() => setActiveModal(null)}
           stats={stats}
-          onUpdateStats={(newSt) => updateStats(newSt)}
+          weeklyCompletedActions={weeklyCompletedActions}
+          onMarkWeeklyActionDone={markWeeklyActionCompleted}
+          onTriggerActionEvent={(params: any) => {
+            handleTriggerActionInteractiveEvent({
+              actionCategory: params.actionCategory,
+              actionName: params.actionName,
+              locationName: params.location || '社团活动室',
+              baseStaminaCost: 10,
+              weeklyActionKey: params.weeklyActionKey,
+              extraContext: params.memoryLog,
+            });
+            if (params.onExtraComplete) params.onExtraComplete();
+          }}
+          onUpdateStats={(newSt: Partial<GameStats>) => updateStats(newSt)}
           onUpdateFavorability={(npcId, amt) => updateFavorability(npcId, amt, 5)}
           onOpenTraineeModal={() => setActiveModal('trainee')}
           onNotify={(msg) => {
@@ -1152,6 +1674,9 @@ export default function App() {
           timeContext={timeContextStr}
           lastJobTurnKey={lastJobTurnKey}
           currentTurnKey={currentTurnKey}
+          weeklyCompletedActions={weeklyCompletedActions}
+          onMarkWeeklyActionDone={markWeeklyActionCompleted}
+          onTriggerActionEvent={handleTriggerActionInteractiveEvent}
           onRecordJobDone={handleRecordJobDone}
           onUpdateStats={(newSt) => updateStats(newSt)}
           onNotify={(msg) => {
@@ -1169,10 +1694,22 @@ export default function App() {
           aiConfig={aiConfig}
           lastJobTurnKey={lastJobTurnKey}
           currentTurnKey={currentTurnKey}
+          weeklyCompletedActions={weeklyCompletedActions}
           onRecordJobDone={handleRecordJobDone}
-          onUpdateStats={(newSt) => updateStats(newSt)}
+          onTriggerActionEvent={(params: any) => {
+            handleTriggerActionInteractiveEvent({
+              actionCategory: params.actionCategory,
+              actionName: params.actionName,
+              locationName: params.location || '兼职地点',
+              baseStaminaCost: 10,
+              weeklyActionKey: params.weeklyActionKey,
+              extraContext: params.memoryLog,
+            });
+            if (params.onExtraComplete) params.onExtraComplete();
+          }}
+          onUpdateStats={(newSt: Partial<GameStats>) => updateStats(newSt)}
           onNotify={showNotification}
-          onShowResultModal={(data) => {
+          onShowResultModal={(data: any) => {
             setChoiceResultData({
               title: data.title,
               description: data.description,
@@ -1196,6 +1733,7 @@ export default function App() {
           npcs={npcs}
           clockMinutes={clockMinutes}
           weekdayIndex={dayInWeek}
+          weeklyCompletedActions={weeklyCompletedActions}
           onOpenChat={(n) => {
             setTargetNpcId(n.id);
             setActiveModal('chat');
@@ -1209,12 +1747,15 @@ export default function App() {
             setActiveModal('gift');
           }}
           onAdvanceStoryline={(n) => {
-            updateFavorability(n.id, 10, 10);
-            addNpcMemory(
-              n.id,
-              `[高${gradeYear}第${weekInYear}周] 与${n.chineseName}经历了深度的心事共鸣，倾听了TA的秘密与梦想。`
-            );
-            showNotification(`✨ 与 ${n.chineseName} 的专属感情/知己故事线推进！好感+10，心动契合+10！`);
+            handleTriggerActionInteractiveEvent({
+              actionCategory: 'npc_date',
+              actionName: `与【${n.chineseName}】推进专属羁绊故事线`,
+              locationName: location,
+              baseStaminaCost: 8,
+              weeklyActionKey: `weekly_storyline_${n.id}`,
+              featuredNpc: n,
+              extraContext: `倾听${n.chineseName}（${n.role}）内心深处的秘密与梦想，羁绊阶段：${n.relationshipStage}`,
+            });
           }}
           onApplyStylePack={handleApplyAvatarStylePack}
           onUpdateNpcAvatar={handleUpdateNpcAvatar}
@@ -1250,30 +1791,32 @@ export default function App() {
           aiConfig={aiConfig}
           gradeYear={gradeYear}
           weekInYear={weekInYear}
-          lastExamKey={lastExamKey}
+          weeklyCompletedActions={weeklyCompletedActions}
           onRecordExamDone={handleRecordExamDone}
+          onTriggerActionEvent={(params: any) => {
+            handleTriggerActionInteractiveEvent({
+              actionCategory: params.actionCategory,
+              actionName: params.actionName,
+              locationName: params.location || '首尔女高',
+              baseStaminaCost: 10,
+              weeklyActionKey: params.weeklyActionKey,
+              extraContext: params.memoryLog,
+              onAfterConfirm:
+                params.weeklyActionKey === 'weekly_mock_exam'
+                  ? () => {
+                      performExamSettlement('mock', stats.academics + 3, gradeYear, weekInYear);
+                    }
+                  : undefined,
+            });
+            if (params.onExtraComplete) params.onExtraComplete();
+          }}
           examRecords={examRecords}
           onTakeExam={(examType) => {
             performExamSettlement(examType, stats.academics + 3, gradeYear, weekInYear);
           }}
-          onUpdateStats={updateStats}
           onNotify={(msg) => {
             addGlobalMemory(msg, 'family');
             showNotification(msg);
-          }}
-          onShowResultModal={(data) => {
-            setChoiceResultData({
-              title: data.title,
-              description: data.description,
-              deltas: data.deltas,
-              memoryLog: data.memoryLog,
-              onConfirm: () => {
-                updateStats(data.deltas);
-                addGlobalMemory(data.memoryLog, 'family');
-                setChoiceResultData(null);
-                setActiveModal(null);
-              },
-            });
           }}
         />
       )}
@@ -1283,8 +1826,18 @@ export default function App() {
         <FacilitiesModal
           onClose={() => setActiveModal(null)}
           stats={stats}
-          onUpdateStats={updateStats}
-          onChangeLocation={setLocation}
+          weeklyCompletedActions={weeklyCompletedActions}
+          onExecuteFacilityAction={(params: any) => {
+            handleTriggerActionInteractiveEvent({
+              actionCategory: 'facility',
+              actionName: params.facilityName,
+              locationName: params.locName,
+              baseStaminaCost: params.minStamina || 0,
+              baseCoinsCost: params.minCoins || 0,
+              weeklyActionKey: params.actionKey,
+              extraContext: params.memoryLog,
+            });
+          }}
           onNotify={(msg) => {
             addGlobalMemory(msg, 'life');
             showNotification(msg);
@@ -1314,9 +1867,25 @@ export default function App() {
           npcs={npcs}
           snsPosts={snsPosts}
           weekLabel={`高${gradeYear}·第${weekInYear <= 18 ? '上' : '下'}学期·第${weekInYear}周`}
+          clockStr={`${String(Math.floor(clockMinutes / 60)).padStart(2, '0')}:${String(clockMinutes % 60).padStart(2, '0')}`}
+          location={location}
+          aiConfig={aiConfig}
+          chatHistories={chatHistories}
+          onUpdateChatHistory={updateChatHistory}
+          fanBubbleThreads={fanBubbleThreads}
+          onUpdateFanBubbleThreads={setFanBubbleThreads}
+          recentScheduleSummary={recentScheduleSummary}
+          protagonistName={protagonistName}
+          protagonistAvatar={protagonistAvatarUrl}
+          onChangeProtagonistAvatar={setProtagonistAvatarUrl}
+          onUpdateFavorability={(npcId, delta) => updateFavorability(npcId, delta)}
+          onAppendNpcMemory={addNpcMemory}
+          onUpdateStats={applyDeltaStats}
           lastJobTurnKey={lastJobTurnKey}
           currentTurnKey={currentTurnKey}
+          weeklyCompletedActions={weeklyCompletedActions}
           onRecordJobDone={handleRecordJobDone}
+          onTriggerActionEvent={handleTriggerActionInteractiveEvent}
           onPublishPost={(newPost, delta) => {
             setSnsPosts((prev) => [newPost, ...prev]);
             applyDeltaStats(delta);
@@ -1330,6 +1899,8 @@ export default function App() {
           onNotify={showNotification}
           initialTab={snsInitialTab}
           onTriggerRandomEncounter={handleTriggerRandomEncounter}
+          onOpenAssetsModal={() => setActiveModal('assets')}
+          onOpenFamilyModal={() => setActiveModal('family')}
         />
       )}
 
@@ -1346,7 +1917,11 @@ export default function App() {
           onResetNewGamePlus={handleResetNewGamePlus}
           onOpenLifePath={(path) => {
             setActiveModal('lifePath');
-            if (path) showNotification(`👑 已进入【${path === 'idol' ? 'K-Pop 顶流爱豆' : path === 'university' ? 'SKY 名门大学与精英职场' : '财阀太太奢华模拟'}】篇章！`);
+            if (path === 'university' || path === 'chaebol') {
+              showNotification('✨ 豪门名流与职场精英支线正在加急制作中！当前版本请先沉浸体验首尔女高、练习生出道及 Bubble 互动，敬请期待后续更新！');
+            } else if (path === 'idol') {
+              showNotification('👑 已进入【K-Pop 顶流爱豆】篇章！');
+            }
           }}
         />
       )}
@@ -1373,6 +1948,36 @@ export default function App() {
         />
       )}
 
+      {/* 11.9 Assets Center Modal */}
+      {activeModal === 'assets' && (
+        <AssetsModal
+          onClose={() => setActiveModal(null)}
+          stats={stats}
+          assets={playerAssets}
+          onBuyHousing={handleBuyHousing}
+          onSelectHousing={handleSelectHousing}
+          onBuyVehicle={handleBuyVehicle}
+          onSelectVehicle={handleSelectVehicle}
+          onNotify={showNotification}
+        />
+      )}
+
+      {/* 11.95 Family Emotional Bond Modal */}
+      {activeModal === 'family' && (
+        <FamilyModal
+          onClose={() => setActiveModal(null)}
+          stats={stats}
+          protagonistName={protagonistName}
+          gradeYear={gradeYear}
+          weekInYear={weekInYear}
+          unreportedMilestones={unreportedMilestones}
+          onClaimMilestone={handleClaimMilestone}
+          onUpdateStats={updateStats}
+          onAddMemory={(summary, cat) => addGlobalMemory(summary, cat)}
+          onNotify={showNotification}
+        />
+      )}
+
       {/* 12. LocalStorage Save/Load Modal */}
       {activeModal === 'saveload' && (
         <SaveLoadModal
@@ -1382,6 +1987,8 @@ export default function App() {
           clockMinutes={clockMinutes}
           npcs={npcs}
           discoveredNpcList={discoveredNpcList}
+          triggeredEventHistory={triggeredEventHistory}
+          weeklyCompletedActions={weeklyCompletedActions}
           wardrobe={wardrobe}
           memories={memories}
           chatHistories={chatHistories}
@@ -1396,6 +2003,14 @@ export default function App() {
               ? data.discoveredNpcList
               : (data.npcs || []).filter((n) => n.isGenerated);
             setDiscoveredNpcList(loadedDiscovered);
+            if (Array.isArray(data.triggeredEventHistory)) {
+              setTriggeredEventHistory(data.triggeredEventHistory);
+            }
+            if (Array.isArray(data.weeklyCompletedActions)) {
+              setWeeklyCompletedActions(data.weeklyCompletedActions);
+            } else {
+              setWeeklyCompletedActions([]);
+            }
             const mergedNpcs = [...(data.npcs || initialNPCs)];
             loadedDiscovered.forEach((d) => {
               if (!mergedNpcs.some((ex) => ex.id === d.id)) {
@@ -1480,13 +2095,19 @@ export default function App() {
           npc={targetNpc}
           onClose={() => setActiveModal(null)}
           stats={stats}
-          onUpdateStats={updateStats}
-          onUpdateFavorability={(id, amt) => updateFavorability(id, amt, 9)}
-          onRecordLunchMemory={(npcId, spotName, fav) => {
-            addNpcMemory(
-              npcId,
-              `[高${gradeYear}第${weekInYear}周] 和秀妍一起去约会享用了【${spotName}】（好感+${fav}%），关系自然升温。`
-            );
+          weeklyCompletedActions={weeklyCompletedActions}
+          onExecuteDateInvite={(p: any) => {
+            setActiveModal(null);
+            handleTriggerActionInteractiveEvent({
+              actionCategory: 'npc_date',
+              actionName: `约会用餐：${p.spotName}`,
+              locationName: '首尔街头约会地点',
+              baseStaminaCost: 0,
+              baseCoinsCost: p.price,
+              weeklyActionKey: `weekly_npc_date_${p.npc.id}`,
+              featuredNpc: p.npc,
+              extraContext: `与${p.npc.chineseName}一起约会享用了【${p.spotName}】`,
+            });
           }}
           onNotify={showNotification}
         />
@@ -1499,6 +2120,7 @@ export default function App() {
           stats={stats}
           npcs={npcs}
           currentLocationName={location}
+          weeklyCompletedActions={weeklyCompletedActions}
           onSetCurrentLocation={handleSetCurrentLocation}
           onExecuteMapAction={handleExecuteMapAction}
           onOpenPortraitModal={(npcId) => {
@@ -1528,6 +2150,35 @@ export default function App() {
           onKeepCurrent={handleKeepCurrentRelationship}
           onDeclineOrCool={handleDeclineOrCoolRelationship}
         />
+      )}
+
+      {/* 18.5 Real-Time AI Fate Deduction / Event Generating Loading Modal */}
+      {isGeneratingAIEvent && !activeEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-xs p-4">
+          <div className="bg-[#f5f0e6] border-2 border-[#d8ccb8] rounded-3xl max-w-md w-full p-6 sm:p-7 text-center shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-[#57534b] to-[#8c6d3b] flex items-center justify-center text-[#f5d68e] shadow-md animate-pulse">
+              <span className="text-2xl">🔮</span>
+            </div>
+            <div className="space-y-1.5">
+              <div className="inline-block text-[10px] font-bold bg-[#e8decb] text-[#5c4f3d] px-2.5 py-0.5 rounded-full">
+                高{eventLoadingContext?.year ?? gradeYear}第{eventLoadingContext?.week ?? weekInYear}周 ·{' '}
+                {eventLoadingContext?.seasonName ?? weekInfo.seasonName} · {eventLoadingContext?.location ?? location}
+              </div>
+              <h3 className="text-base sm:text-lg font-black text-[#2b2620] tracking-wide">
+                命运推演中 / 剧情生成中...
+              </h3>
+              <p className="text-xs text-[#63584a] leading-relaxed">
+                AI 正在结合你当前的属性极值、所在场景【{eventLoadingContext?.location ?? location}】以及与【
+                {eventLoadingContext?.npcName ?? selectedNpc.chineseName}（{eventLoadingContext?.npcRole ?? selectedNpc.role}
+                ）】的过往共同记忆，现场构思独一无二的突发事件...
+              </p>
+            </div>
+            <div className="pt-1 flex items-center justify-center gap-2 text-[11px] font-bold text-[#7a6035]">
+              <span className="w-2 h-2 rounded-full bg-[#8c6d3b] animate-ping" />
+              <span>已过滤 {triggeredEventHistory.slice(-10).length} 条近期历史事件 · 拒绝重复桥段</span>
+            </div>
+          </div>
+        </div>
       )}
 
       {activeEvent && <EventModal event={activeEvent} onResolve={handleResolveEvent} />}

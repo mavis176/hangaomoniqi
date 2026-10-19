@@ -21,13 +21,28 @@ import {
   ClubTournamentTier,
 } from '../../data/clubAndTraineeData';
 
+import { ActionEventCategory } from '../../services/aiService';
+
 interface ClubModalProps {
   onClose: () => void;
   stats: GameStats;
+  weeklyCompletedActions?: string[];
+  onMarkWeeklyActionDone?: (key: string) => void;
   onUpdateStats: (newStats: Partial<GameStats>) => void;
   onUpdateFavorability?: (npcId: string, amount: number) => void;
   onOpenTraineeModal?: () => void;
   onNotify: (msg: string) => void;
+  onTriggerActionEvent?: (params: {
+    weeklyActionKey: string;
+    actionCategory: ActionEventCategory;
+    actionName: string;
+    location: string;
+    baseDeltas: Partial<GameStats>;
+    npcId?: string;
+    baseFavDelta?: number;
+    memoryLog: string;
+    onExtraComplete?: () => void;
+  }) => void;
 }
 
 function computeClubRank(skill: number, teamwork: number, trophiesCount: number): ClubRankType {
@@ -40,10 +55,13 @@ function computeClubRank(skill: number, teamwork: number, trophiesCount: number)
 export const ClubModal: React.FC<ClubModalProps> = ({
   onClose,
   stats,
+  weeklyCompletedActions = [],
+  onMarkWeeklyActionDone,
   onUpdateStats,
   onUpdateFavorability,
   onOpenTraineeModal,
   onNotify,
+  onTriggerActionEvent,
 }) => {
   // Active Sub-Popup 1: Club Sudden Incident Modal
   const [activeIncident, setActiveIncident] = useState<ClubSuddenIncident | null>(null);
@@ -57,17 +75,52 @@ export const ClubModal: React.FC<ClubModalProps> = ({
 
   const currentClub = CLUBS_INFO.find((c) => c.id === stats.clubId) || CLUBS_INFO[0];
   const trophies = stats.clubTrophies || [];
+  const isClubTrainingDone = weeklyCompletedActions.includes('weekly_club_training');
+  const isClubTournamentDone = weeklyCompletedActions.includes('weekly_club_tournament');
 
-  // Trigger a Club Training + Sudden Incident Popup!
+  // Trigger a Club Training + AI Interactive Sudden Event Popup!
   const handleClubActivityWithIncident = (mode: 'regular' | 'night' | 'camp', clubId: string) => {
+    if (isClubTrainingDone) return;
     const cost = mode === 'camp' ? 16 : mode === 'night' ? 12 : 8;
     if (stats.stamina < cost) {
       onNotify(`体力不足 ${cost} 点，请先休息补充体力后再进行社团活动！`);
       return;
     }
 
+    const modeLabels = {
+      regular: `${currentClub.name} · 放学常规合练`,
+      night: `${currentClub.name} · 留校深夜加练`,
+      camp: `${currentClub.name} · 周末赛前魔鬼集训`,
+    };
     const baseSkillGain = mode === 'camp' ? 6 : mode === 'night' ? 4 : 3;
     const baseTeamGain = mode === 'camp' ? 7 : mode === 'night' ? 4 : 3;
+
+    if (onTriggerActionEvent) {
+      onTriggerActionEvent({
+        weeklyActionKey: 'weekly_club_training',
+        actionCategory: 'club_activity',
+        actionName: modeLabels[mode],
+        location: `${currentClub.name}活动室`,
+        baseDeltas: {
+          clubSkill: baseSkillGain,
+          clubTeamwork: baseTeamGain,
+          clubStagePower: baseSkillGain,
+          stamina: -cost,
+        },
+        npcId: currentClub.npcId,
+        baseFavDelta: 4,
+        memoryLog: `在【${currentClub.name}】完成了【${modeLabels[mode]}】，社团实力与团队默契显著提升。`,
+        onExtraComplete: () => {
+          const nextSkill = Math.min(100, stats.clubSkill + baseSkillGain);
+          const nextTeam = Math.min(100, (stats.clubTeamwork || 35) + baseTeamGain);
+          onUpdateStats({
+            clubId,
+            clubRank: computeClubRank(nextSkill, nextTeam, trophies.length),
+          });
+        },
+      });
+      return;
+    }
     const nextSkill = Math.min(100, stats.clubSkill + baseSkillGain);
     const nextTeam = Math.min(100, (stats.clubTeamwork || 35) + baseTeamGain);
     const nextStagePwr = Math.min(100, (stats.clubStagePower || 35) + baseSkillGain);
@@ -118,11 +171,13 @@ export const ClubModal: React.FC<ClubModalProps> = ({
       onUpdateFavorability(opt.npcId, opt.favDelta);
     }
 
+    onMarkWeeklyActionDone?.('weekly_club_training');
     setIncidentOutcome(opt.outcomeText);
   };
 
   // Start 3-Stage Interactive Competition
   const handleStartTournament = (tier: ClubTournamentTier) => {
+    if (isClubTournamentDone) return;
     if (stats.stamina < tier.staminaCost) {
       onNotify(`出战【${tier.name}】需要至少 ${tier.staminaCost} 点体力！`);
       return;
@@ -196,6 +251,7 @@ export const ClubModal: React.FC<ClubModalProps> = ({
       onUpdateFavorability(currentClub.npcId, isChampion ? 12 : 6);
     }
 
+    onMarkWeeklyActionDone?.('weekly_club_tournament');
     setTourStage(3);
   };
 
@@ -305,8 +361,13 @@ export const ClubModal: React.FC<ClubModalProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <button
+                disabled={isClubTrainingDone}
                 onClick={() => handleClubActivityWithIncident('regular', currentClub.id)}
-                className="bg-white hover:bg-[#fcfaf5] border border-[#cfc7b8] rounded-xl p-3 text-left transition-all shadow-2xs cursor-pointer group"
+                className={`border rounded-xl p-3 text-left transition-all shadow-2xs group ${
+                  isClubTrainingDone
+                    ? 'bg-stone-200 border-stone-300 text-stone-500 cursor-not-allowed'
+                    : 'bg-white hover:bg-[#fcfaf5] border-[#cfc7b8] cursor-pointer'
+                }`}
               >
                 <div className="flex items-center justify-between font-bold text-xs sm:text-sm text-[#2b2620]">
                   <span>🎵 放学常规合练</span>
@@ -315,14 +376,25 @@ export const ClubModal: React.FC<ClubModalProps> = ({
                 <p className="text-[11px] text-[#6e6456] mt-1">
                   与部员们打磨基本功，并处理部室日常突发小插曲。
                 </p>
-                <div className="mt-2 text-[11px] font-bold text-[#4b5e4d] group-hover:translate-x-0.5 transition-transform">
-                  立即开展并触发事件 ▶
+                <div
+                  className={`mt-2 text-[11px] font-bold ${
+                    isClubTrainingDone
+                      ? 'text-stone-600'
+                      : 'text-[#4b5e4d] group-hover:translate-x-0.5 transition-transform'
+                  }`}
+                >
+                  {isClubTrainingDone ? '本周已完成（下周重置）' : '立即开展并触发AI事件 ▶'}
                 </div>
               </button>
 
               <button
+                disabled={isClubTrainingDone}
                 onClick={() => handleClubActivityWithIncident('night', currentClub.id)}
-                className="bg-white hover:bg-[#fcfaf5] border border-[#cfc7b8] rounded-xl p-3 text-left transition-all shadow-2xs cursor-pointer group"
+                className={`border rounded-xl p-3 text-left transition-all shadow-2xs group ${
+                  isClubTrainingDone
+                    ? 'bg-stone-200 border-stone-300 text-stone-500 cursor-not-allowed'
+                    : 'bg-white hover:bg-[#fcfaf5] border-[#cfc7b8] cursor-pointer'
+                }`}
               >
                 <div className="flex items-center justify-between font-bold text-xs sm:text-sm text-[#2b2620]">
                   <span>🌙 留校深夜加练</span>
@@ -331,14 +403,25 @@ export const ClubModal: React.FC<ClubModalProps> = ({
                 <p className="text-[11px] text-[#6e6456] mt-1">
                   放学后与核心搭档留下来攻克高难技巧，大幅增进默契。
                 </p>
-                <div className="mt-2 text-[11px] font-bold text-[#4b5e4d] group-hover:translate-x-0.5 transition-transform">
-                  立即开展并触发事件 ▶
+                <div
+                  className={`mt-2 text-[11px] font-bold ${
+                    isClubTrainingDone
+                      ? 'text-stone-600'
+                      : 'text-[#4b5e4d] group-hover:translate-x-0.5 transition-transform'
+                  }`}
+                >
+                  {isClubTrainingDone ? '本周已完成（下周重置）' : '立即开展并触发AI事件 ▶'}
                 </div>
               </button>
 
               <button
+                disabled={isClubTrainingDone}
                 onClick={() => handleClubActivityWithIncident('camp', currentClub.id)}
-                className="bg-white hover:bg-[#fcfaf5] border border-[#cfc7b8] rounded-xl p-3 text-left transition-all shadow-2xs cursor-pointer group"
+                className={`border rounded-xl p-3 text-left transition-all shadow-2xs group ${
+                  isClubTrainingDone
+                    ? 'bg-stone-200 border-stone-300 text-stone-500 cursor-not-allowed'
+                    : 'bg-white hover:bg-[#fcfaf5] border-[#cfc7b8] cursor-pointer'
+                }`}
               >
                 <div className="flex items-center justify-between font-bold text-xs sm:text-sm text-[#2b2620]">
                   <span>🔥 周末赛前魔鬼合宿</span>
@@ -347,8 +430,14 @@ export const ClubModal: React.FC<ClubModalProps> = ({
                 <p className="text-[11px] text-[#6e6456] mt-1">
                   全天候封闭式集训与突发危机演练，快速晋升社团职位！
                 </p>
-                <div className="mt-2 text-[11px] font-bold text-[#4b5e4d] group-hover:translate-x-0.5 transition-transform">
-                  立即开展并触发事件 ▶
+                <div
+                  className={`mt-2 text-[11px] font-bold ${
+                    isClubTrainingDone
+                      ? 'text-stone-600'
+                      : 'text-[#4b5e4d] group-hover:translate-x-0.5 transition-transform'
+                  }`}
+                >
+                  {isClubTrainingDone ? '本周已完成（下周重置）' : '立即开展并触发AI事件 ▶'}
                 </div>
               </button>
             </div>
@@ -360,7 +449,7 @@ export const ClubModal: React.FC<ClubModalProps> = ({
               <div>
                 <h3 className="text-sm sm:text-base font-black text-[#3d2e18] flex items-center gap-1.5">
                   <Trophy className="w-4 h-4 text-amber-600" />
-                  <span>出战社团竞技大赛（三阶段互动比赛弹窗 · 含赛中突发危机应对）</span>
+                  <span>出战社团竞技大赛（每周限 1 次 · 三阶段互动比赛弹窗）</span>
                 </h3>
                 <p className="text-xs text-[#6e5c42] mt-0.5">
                   已斩获荣誉奖杯：{trophies.length > 0 ? trophies.join(' · ') : '暂未夺冠，快去报名参赛吧！'}
@@ -371,12 +460,14 @@ export const ClubModal: React.FC<ClubModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {CLUB_TOURNAMENTS.map((tier) => {
                 const isWon = trophies.includes(tier.trophyName);
-                const canEnter = stats.clubSkill >= tier.requiredSkill - 10;
+                const canEnter = !isClubTournamentDone && stats.clubSkill >= tier.requiredSkill - 10;
                 return (
                   <div
                     key={tier.id}
                     className={`rounded-xl p-3 border flex flex-col justify-between ${
-                      isWon
+                      isClubTournamentDone
+                        ? 'bg-stone-100 border-stone-300 opacity-85'
+                        : isWon
                         ? 'bg-amber-50/70 border-amber-400'
                         : 'bg-white border-[#d6cfc2]'
                     }`}
@@ -407,11 +498,21 @@ export const ClubModal: React.FC<ClubModalProps> = ({
                     <button
                       onClick={() => handleStartTournament(tier)}
                       disabled={!canEnter}
-                      className="mt-3 w-full py-2 bg-gradient-to-r from-[#8c6836] to-[#6b4e26] hover:from-[#9e7740] hover:to-[#7d5c2e] disabled:opacity-45 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-xs cursor-pointer"
+                      className={`mt-3 w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-xs ${
+                        isClubTournamentDone
+                          ? 'bg-stone-300 text-stone-600 border border-stone-400 cursor-not-allowed'
+                          : canEnter
+                          ? 'bg-gradient-to-r from-[#8c6836] to-[#6b4e26] hover:from-[#9e7740] hover:to-[#7d5c2e] text-white cursor-pointer'
+                          : 'bg-stone-200 text-stone-400 cursor-not-allowed'
+                      }`}
                     >
                       <Flame className="w-3.5 h-3.5 text-[#f5d68e]" />
                       <span>
-                        {canEnter ? `进入赛场 (-${tier.staminaCost}体力)` : `实力不足(需${tier.requiredSkill - 10})`}
+                        {isClubTournamentDone
+                          ? '本周已完成（下周重置）'
+                          : canEnter
+                          ? `进入赛场 (-${tier.staminaCost}体力)`
+                          : `实力不足(需${tier.requiredSkill - 10})`}
                       </span>
                     </button>
                   </div>
@@ -640,6 +741,9 @@ export const ClubModal: React.FC<ClubModalProps> = ({
 
                     <button
                       onClick={() => {
+                        if (onMarkWeeklyActionDone) {
+                          onMarkWeeklyActionDone('weekly_club_tournament');
+                        }
                         setActiveTournament(null);
                         onNotify(
                           `完成了【${activeTournament.name}】，最终得分 ${tourScore}分，奖金 +₩${prize.toLocaleString()}！`
@@ -647,7 +751,7 @@ export const ClubModal: React.FC<ClubModalProps> = ({
                       }}
                       className="w-full py-2.5 bg-gradient-to-r from-[#8c6836] to-[#6b4e26] text-white rounded-xl text-xs sm:text-sm font-bold cursor-pointer"
                     >
-                      捧起奖杯返回社团部室
+                      确认完成并捧起奖杯返回社团部室
                     </button>
                   </div>
                 );

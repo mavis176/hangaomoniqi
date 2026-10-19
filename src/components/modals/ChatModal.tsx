@@ -18,6 +18,7 @@ import {
   generateNpcChatReply,
   generateNpcMemorySummary,
   NpcMemorySummaryResult,
+  splitNpcReplyIntoBubbles,
 } from '../../services/aiService';
 
 interface ChatModalProps {
@@ -144,43 +145,48 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   useEffect(() => {
     if (chatHistory.length === 0) {
       const stage = npc.relationshipStage || '朋友';
-      let greetingText = `秀妍！正好在${location}碰到你，今天感觉怎么样？`;
-      let actionDesc = `${npc.chineseName}转过头来，眼神亮晶晶地注视着你`;
+      let greetingBubbles = [`秀妍！正好在${location}碰到你`, `今天感觉怎么样？`];
+      let actionDesc = `${npc.chineseName}转过头来，温和地注视着你`;
       let innerThought = `看到秀妍走过来，整个人都轻松了不少。`;
 
       if (npc.isGenerated) {
-        greetingText = `秀妍！真巧啊，刚才还在想上次在${npc.encounterLocation || '首尔街头'}偶遇你的事呢。今天过得怎么样？`;
-        actionDesc = `${npc.chineseName}带着【${npc.role}】特有的神采看向你，语气自然流露出“${npc.speakingStyle || '亲切随和'}”的风格`;
-        innerThought = `没想到这么快就能和秀妍在KakaoTalk上聊起来，上次交换联系方式太明智了。`;
+        greetingBubbles = [
+          `秀妍，真巧啊`,
+          `刚才还想起上次在${npc.encounterLocation || '首尔街头'}偶遇你的事呢`,
+          `今天过得怎么样？`,
+        ];
+        actionDesc = `${npc.chineseName}停下脚步，微笑着朝你打招呼`;
+        innerThought = `没想到这么快就能和秀妍聊上，真开心。`;
       } else if (npc.id === 'npc_3') {
-        greetingText =
+        greetingBubbles =
           stage === '恋人' || stage === '灵魂伴侣'
-            ? `秀妍，你在${location}发什么呆呢？……冷不冷？过来，我这罐热咖啡分你捂捂手。`
-            : `李秀妍？现在是${clockStr}，你不去争分夺秒刷题，特意来找我有什么事？`;
-        actionDesc = `${npc.chineseName}轻轻合上活页笔记本，抬眸看向你，清冷的目光里带着一丝不易察觉的柔和`;
-        innerThought = `她主动找我搭话了……其实我一直在等她开口。`;
+            ? [`秀妍，手冷不冷？`, `过来吧，这罐热咖啡分你捂捂手。`]
+            : [`是秀妍啊，正好我也刚做完这一节题`, `找我有什么事吗？`];
+        actionDesc = `${npc.chineseName}轻轻合上活页笔记本，抬眸温和地看向你`;
+        innerThought = `她主动找我搭话了，其实我刚才就注意到她了。`;
       } else if (npc.id === 'npc_4') {
-        greetingText =
+        greetingBubbles =
           stage === '恋人' || stage === '暧昧'
-            ? `秀妍，刚从教室出来吗？我正打算去广播室挑歌，想不想来陪我听听新Demo？`
-            : `是高一1班的秀妍啊。正好在${location}不忙，下课出来透透气吗？`;
-        actionDesc = `${npc.chineseName}温和地笑着收起乐谱，目光里满是少年特有的明朗与体贴`;
-        innerThought = `每次在走廊看见秀妍，一天枯燥的排练都变得有意思了。`;
+            ? [`秀妍，刚下课吗？`, `我正要去广播室挑歌，要不要一起去听听新Demo？`]
+            : [`是秀妍啊`, `正好在${location}碰到，出来透透气吗？`];
+        actionDesc = `${npc.chineseName}温和地笑着收起乐谱，目光清澈而体贴`;
+        innerThought = `每次在走廊看见秀妍，心情都会变好。`;
       } else if (npc.id === 'npc_5') {
-        greetingText = `哟！秀妍！正巧在${location}遇到你！看我刚去小卖部抢的冰镇宝矿力，给你留了一罐！`;
-        actionDesc = `姜海仁飒爽地单手转着排球，笑得露出一口整齐的小白牙，潇洒地递过饮料`;
-        innerThought = `特意从小卖部一路小跑回来的，就为了第一时间碰见秀妍！`;
+        greetingBubbles = [`秀妍！正好在这儿遇到你`, `我刚去小卖部买了两罐冰宝矿力`, `这罐给你留着呢！`];
+        actionDesc = `姜海仁抱住排球走过来，爽朗温和地把饮料递给你`;
+        innerThought = `特意从小卖部快步走回来的，就为了第一时间碰见秀妍。`;
       } else if (npc.id === 'npc_6') {
-        greetingText = `把降噪耳机摘下来就听见你的脚步声了。怎么，练习生考核压力大？来跟我聊会儿。`;
-        actionDesc = `千宥娜摘下单侧银色监听耳机，修长指尖托着腮，漫不经心地勾唇浅笑`;
-        innerThought = `在首尔女高，大概只有她能让我真正卸下防备了。`;
+        greetingBubbles = [`刚摘下耳机就听见你的脚步声了`, `最近练习累不累？过来坐会儿吧。`];
+        actionDesc = `千宥娜摘下单侧监听耳返，温和地朝你招了招手`;
+        innerThought = `在首尔女高，和她待在一起最让人安心。`;
       }
 
       const initialGreeting: ChatMessage = {
         sender: 'npc',
         timeLabel: clockStr,
         actionDesc,
-        text: greetingText,
+        text: greetingBubbles.join('\n'),
+        bubbles: greetingBubbles,
         innerThought,
       };
       onUpdateChatHistory(npc.id, [initialGreeting]);
@@ -296,18 +302,28 @@ export const ChatModal: React.FC<ChatModalProps> = ({
         onAddNpcMemory(npc.id, `[${timeContext}] ${newMem}`);
       }
 
-      const npcReplyMsg: ChatMessage = {
-        sender: 'npc',
-        text: aiResult.reply,
-        timeLabel: clockStr,
-        innerThought: aiResult.innerThought,
-        actionDesc: aiResult.actionDesc,
-        favDelta,
-        newMemory: newMem || undefined,
-        extractedKeywords: newlyAddedKeywords.length > 0 ? newlyAddedKeywords : undefined,
-      };
+      const bubbles = splitNpcReplyIntoBubbles(aiResult.reply, aiResult.replies, trimmed);
 
-      onUpdateChatHistory(npc.id, [...updatedHistory, npcReplyMsg]);
+      // 逐条弹出短句气泡，模拟真人打字连发短消息的节奏感
+      for (let i = 0; i < bubbles.length; i++) {
+        if (i > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 260));
+        }
+        const partialBubbles = bubbles.slice(0, i + 1);
+        const isLast = i === bubbles.length - 1;
+        const partialReplyMsg: ChatMessage = {
+          sender: 'npc',
+          text: partialBubbles.join('\n'),
+          bubbles: partialBubbles,
+          timeLabel: clockStr,
+          actionDesc: aiResult.actionDesc,
+          innerThought: isLast ? aiResult.innerThought : undefined,
+          favDelta: isLast ? favDelta : undefined,
+          newMemory: isLast ? newMem || undefined : undefined,
+          extractedKeywords: isLast && newlyAddedKeywords.length > 0 ? newlyAddedKeywords : undefined,
+        };
+        onUpdateChatHistory(npc.id, [...updatedHistory, partialReplyMsg]);
+      }
 
       if (Array.isArray(aiResult.suggestedReplies) && aiResult.suggestedReplies.length > 0) {
         setSuggestedTopics(aiResult.suggestedReplies.slice(0, 3));
@@ -322,21 +338,23 @@ export const ChatModal: React.FC<ChatModalProps> = ({
       onAdvanceMinutes(10);
     } catch (_err: any) {
       const fallbackFav = 3;
-      const fallbackTopic = trimmed.slice(0, 10);
+      const fallbackTopic = trimmed.slice(0, 8);
+      const fallbackBubbles =
+        npc.id === 'npc_3'
+          ? ['这件事我记在心上了', '不过待会儿还有模拟考复习', '我们一起加油吧']
+          : ['嗯嗯，我都记下啦', '待会儿下课铃响了我们再接着聊~'];
       const fallbackMsg: ChatMessage = {
         sender: 'npc',
         timeLabel: clockStr,
-        actionDesc: `${npc.chineseName}专注地听你说完，温柔地弯了弯眉眼`,
-        text:
-          npc.id === 'npc_3'
-            ? `关于你说的这个，我记在心上了。不过别光顾着闲聊，待会儿模拟考冲刺复习可别偷懒。`
-            : `嗯！你刚才说的我都记住啦，待会儿下课钟声响了我们继续接着聊~`,
-        innerThought: `只要是秀妍说的话，我都想仔细听完。`,
+        actionDesc: `${npc.chineseName}认真地听你说完，温和地弯了弯眉眼`,
+        text: fallbackBubbles.join('\n'),
+        bubbles: fallbackBubbles,
+        innerThought: `只要是秀妍说的话，我都想认真听完。`,
         favDelta: fallbackFav,
         extractedKeywords: [fallbackTopic],
       };
 
-      if (!memoryKeywords.includes(fallbackTopic)) {
+      if (fallbackTopic && !memoryKeywords.includes(fallbackTopic)) {
         const nextKw = [...memoryKeywords, fallbackTopic];
         setMemoryKeywords(nextKw);
         onUpdateNpcKeywords?.(npc.id, nextKw);
@@ -709,68 +727,102 @@ export const ChatModal: React.FC<ChatModalProps> = ({
           className="p-3 sm:p-4 flex-1 overflow-y-auto overscroll-contain space-y-3 bg-[#e2dbd0]/75 min-h-0"
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
-          {chatHistory.map((m, idx) => (
-            <div key={idx} className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'}`}>
-              {m.actionDesc && (
-                <div className="text-[11px] text-[#635a4e] italic mb-1 px-1 font-medium">
-                  * {m.actionDesc} *
-                </div>
-              )}
-              <div
-                className={`max-w-[88%] p-3 rounded-2xl text-xs sm:text-[13px] leading-relaxed shadow-xs ${
-                  m.sender === 'user'
-                    ? 'bg-gradient-to-b from-[#786c5b] to-[#635848] text-white rounded-br-xs border border-[#918572]'
-                    : 'bg-[#f7f5ee] text-[#2b2620] rounded-bl-xs border border-[#cfc7b8]'
-                }`}
-              >
-                <div>{m.text}</div>
+          {chatHistory.map((m, idx) => {
+            const isSummaryBriefing = m.extractedKeywords?.includes('简报AI总结');
+            const npcBubbles =
+              m.sender === 'npc' && !isSummaryBriefing
+                ? m.bubbles && m.bubbles.length > 0
+                  ? m.bubbles
+                  : splitNpcReplyIntoBubbles(m.text)
+                : [m.text];
 
-                {/* NPC's Deep Inner Thoughts */}
-                {m.innerThought && (
-                  <div className="mt-2 pt-1.5 border-t border-[#dfd8cc] text-[11px] text-[#705e45] bg-[#efe9dc]/80 px-2.5 py-1 rounded-lg">
-                    💭 心声：{m.innerThought}
+            return (
+              <div key={idx} className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'}`}>
+                {m.actionDesc && (
+                  <div className="text-[11px] text-[#635a4e] italic mb-1 px-1 font-medium">
+                    * {m.actionDesc} *
                   </div>
                 )}
 
-                {/* Extracted Memory Keywords Tag */}
-                {Array.isArray(m.extractedKeywords) && m.extractedKeywords.length > 0 && (
-                  <div className="mt-1.5 flex items-center gap-1 flex-wrap">
-                    <span className="text-[10px] text-[#7d6739] font-bold">🧠 记忆提取:</span>
-                    {m.extractedKeywords.map((kw, ki) => (
-                      <span
-                        key={ki}
-                        className="text-[10px] font-bold bg-[#faecd2] text-[#634918] border border-[#e8d5b0] px-1.5 py-0.2 rounded-md"
+                {m.sender === 'user' || isSummaryBriefing ? (
+                  <div
+                    className={`max-w-[88%] p-3 rounded-2xl text-xs sm:text-[13px] leading-relaxed shadow-xs ${
+                      m.sender === 'user'
+                        ? 'bg-gradient-to-b from-[#786c5b] to-[#635848] text-white rounded-br-xs border border-[#918572]'
+                        : 'bg-[#f7f5ee] text-[#2b2620] rounded-bl-xs border border-[#cfc7b8]'
+                    }`}
+                  >
+                    <div>{m.text}</div>
+                    {m.innerThought && (
+                      <div className="mt-2 pt-1.5 border-t border-[#dfd8cc] text-[11px] text-[#705e45] bg-[#efe9dc]/80 px-2.5 py-1 rounded-lg">
+                        💭 {m.innerThought}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-start gap-1.5 max-w-[86%]">
+                    {npcBubbles.map((bubbleText, bIdx) => (
+                      <div
+                        key={bIdx}
+                        className="bg-[#f7f5ee] text-[#2b2620] px-3.5 py-2 rounded-2xl rounded-bl-xs border border-[#cfc7b8] text-xs sm:text-[13px] leading-relaxed shadow-xs w-fit animate-in fade-in slide-in-from-left-1 duration-150"
                       >
-                        #{kw}
-                      </span>
+                        {bubbleText}
+                      </div>
                     ))}
+
+                    {(m.innerThought ||
+                      (Array.isArray(m.extractedKeywords) && m.extractedKeywords.length > 0) ||
+                      m.newMemory ||
+                      m.timeLabel ||
+                      typeof m.favDelta === 'number') && (
+                      <div className="bg-[#f3ede2]/90 border border-[#d8cfc0] rounded-xl px-2.5 py-1.5 w-full space-y-1">
+                        {m.innerThought && (
+                          <div className="text-[11px] text-[#705e45]">
+                            💭 心声：{m.innerThought}
+                          </div>
+                        )}
+
+                        {Array.isArray(m.extractedKeywords) && m.extractedKeywords.length > 0 && (
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span className="text-[10px] text-[#7d6739] font-bold">🧠 记忆提取:</span>
+                            {m.extractedKeywords.map((kw, ki) => (
+                              <span
+                                key={ki}
+                                className="text-[10px] font-bold bg-[#faecd2] text-[#634918] border border-[#e8d5b0] px-1.5 py-0.2 rounded-md"
+                              >
+                                #{kw}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {m.newMemory && (
+                          <div className="text-[10px] font-bold text-[#6e5528] bg-[#f5ebd6] border border-[#dfcda8] px-2 py-0.5 rounded-md flex items-center gap-1">
+                            <span>📌 新约定：</span>
+                            <span>{m.newMemory}</span>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between gap-3 text-[10px] opacity-75">
+                          {m.timeLabel && <span>{m.timeLabel}</span>}
+                          {typeof m.favDelta === 'number' && (
+                            <span className="font-bold text-[#3f7547]">
+                              好感 {m.favDelta >= 0 ? `+${m.favDelta}` : m.favDelta}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
-
-                {/* Milestone Memory Log */}
-                {m.newMemory && (
-                  <div className="mt-1.5 text-[10px] font-bold text-[#6e5528] bg-[#f5ebd6] border border-[#dfcda8] px-2 py-0.5 rounded-md flex items-center gap-1">
-                    <span>📌 新约定：</span>
-                    <span>{m.newMemory}</span>
-                  </div>
-                )}
-
-                <div className="mt-1 flex items-center justify-between gap-3 text-[10px] opacity-75">
-                  {m.timeLabel && <span>{m.timeLabel}</span>}
-                  {typeof m.favDelta === 'number' && (
-                    <span className="font-bold text-[#3f7547]">
-                      好感 {m.favDelta >= 0 ? `+${m.favDelta}` : m.favDelta}
-                    </span>
-                  )}
-                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {isLoading && (
             <div className="flex items-center gap-2 text-xs text-[#5c5243] bg-[#f7f5ef] border border-[#cfc7b8] px-3.5 py-2 rounded-xl w-fit shadow-xs animate-pulse">
               <Sparkles className="w-3.5 h-3.5 text-[#9c7838] animate-spin" />
-              <span>{npc.chineseName} 正在根据性格与好感度生成回应...</span>
+              <span>{npc.chineseName} 正在输入短消息...</span>
             </div>
           )}
           <div ref={chatEndRef} />

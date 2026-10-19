@@ -21,6 +21,7 @@ interface RelationshipModalProps {
   npcs: NPCClassmate[];
   clockMinutes?: number;
   weekdayIndex?: number;
+  weeklyCompletedActions?: string[];
   onOpenChat: (npc: NPCClassmate) => void;
   onOpenLunch: (npc: NPCClassmate) => void;
   onOpenGift: (npc: NPCClassmate) => void;
@@ -35,6 +36,7 @@ interface RelationshipModalProps {
 export const RelationshipModal: React.FC<RelationshipModalProps> = ({
   onClose,
   npcs,
+  weeklyCompletedActions = [],
   onOpenChat,
   onOpenLunch,
   onOpenGift,
@@ -332,49 +334,69 @@ export const RelationshipModal: React.FC<RelationshipModalProps> = ({
                 </div>
 
                 {/* Action Buttons */}
-                <div className="mt-3 pt-2.5 border-t border-[#ece6dc] grid grid-cols-4 gap-1.5">
-                  <button
-                    onClick={() => {
-                      onClose();
-                      onOpenChat(npc);
-                    }}
-                    className="py-1.5 px-2 bg-[#f0ebe1] hover:bg-[#e3dacb] text-[#3d352b] rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    <MessageCircle className="w-3.5 h-3.5" />
-                    <span>AI聊天</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      onClose();
-                      onOpenLunch(npc);
-                    }}
-                    className="py-1.5 px-2 bg-[#f0ebe1] hover:bg-[#e3dacb] text-[#3d352b] rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    <Utensils className="w-3.5 h-3.5" />
-                    <span>约饭</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      onClose();
-                      onOpenGift(npc);
-                    }}
-                    className="py-1.5 px-2 bg-[#f0ebe1] hover:bg-[#e3dacb] text-[#3d352b] rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    <Gift className="w-3.5 h-3.5" />
-                    <span>送礼</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (onAdvanceStoryline) {
+                <div className="mt-3 pt-2.5 border-t border-[#ece6dc] space-y-1.5">
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button
+                      onClick={() => {
                         onClose();
-                        onAdvanceStoryline(npc);
-                      }
-                    }}
-                    className="py-1.5 px-2 bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>约会剧情</span>
-                  </button>
+                        onOpenChat(npc);
+                      }}
+                      className="py-1.5 px-2 bg-[#f0ebe1] hover:bg-[#e3dacb] text-[#3d352b] rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      <span>AI聊天</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        onClose();
+                        onOpenLunch(npc);
+                      }}
+                      className="py-1.5 px-2 bg-[#f0ebe1] hover:bg-[#e3dacb] text-[#3d352b] rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Utensils className="w-3.5 h-3.5" />
+                      <span>约饭菜单</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        onClose();
+                        onOpenGift(npc);
+                      }}
+                      className="py-1.5 px-2 bg-[#f0ebe1] hover:bg-[#e3dacb] text-[#3d352b] rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Gift className="w-3.5 h-3.5" />
+                      <span>送礼</span>
+                    </button>
+                  </div>
+
+                  {(() => {
+                    const isDatedThisWeek = weeklyCompletedActions.includes(
+                      `weekly_npc_date_${npc.id}`
+                    );
+                    return (
+                      <button
+                        disabled={isDatedThisWeek}
+                        onClick={() => {
+                          if (isDatedThisWeek) return;
+                          if (onAdvanceStoryline) {
+                            onClose();
+                            onAdvanceStoryline(npc);
+                          }
+                        }}
+                        className={`w-full py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                          isDatedThisWeek
+                            ? 'bg-stone-300 border border-stone-400 text-stone-600 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white cursor-pointer shadow-2xs'
+                        }`}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>
+                          {isDatedThisWeek
+                            ? '本周已完成（下周重置）'
+                            : `主动约会邀请 ${npc.chineseName} (每人每周限1次)`}
+                        </span>
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             );

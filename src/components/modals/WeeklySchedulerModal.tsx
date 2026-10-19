@@ -34,7 +34,10 @@ import {
   PREDEFINED_PLAYER_TRAITS,
   PREDEFINED_INTERRUPT_EVENTS,
 } from '../../data/gameData';
-import { generateNewNPCEncounter } from '../../services/aiService';
+import {
+  generateNewNPCEncounter,
+  generateWeeklyInterruptEvent,
+} from '../../services/aiService';
 import {
   convertEncounterToNPC,
   DYNAMIC_NPC_FALLBACK_PRESETS,
@@ -46,12 +49,16 @@ interface WeeklySchedulerModalProps {
   gradeYear: number;
   weekInYear: number;
   stats: GameStats;
+  npcs?: NPCClassmate[];
+  triggeredEventHistory?: string[];
+  onRecordTriggeredEvent?: (id?: string, title?: string) => void;
   aiConfig?: AIConfig;
   onCompleteWeeklyExecution: (
     summary: WeeklyExecutionSummary,
     combinedDeltas: Partial<GameStats>
   ) => void;
   onJumpToWeek: (targetYear: number, targetWeek: number, label: string) => void;
+  onOpenTimeSkipSummary?: (targetYear: number, targetWeek: number) => void;
   onAddNewNPC?: (npc: NPCClassmate) => void;
   onNotify?: (msg: string) => void;
 }
@@ -63,9 +70,13 @@ export const WeeklySchedulerModal: React.FC<WeeklySchedulerModalProps> = ({
   gradeYear,
   weekInYear,
   stats,
+  npcs = [],
+  triggeredEventHistory = [],
+  onRecordTriggeredEvent,
   aiConfig,
   onCompleteWeeklyExecution,
   onJumpToWeek,
+  onOpenTimeSkipSummary,
   onAddNewNPC,
   onNotify,
 }) => {
@@ -91,6 +102,10 @@ export const WeeklySchedulerModal: React.FC<WeeklySchedulerModalProps> = ({
   >('config');
   const [currentExecutingDayIndex, setCurrentExecutingDayIndex] = useState<number>(0);
   const [activeInterrupt, setActiveInterrupt] = useState<InterruptEvent | null>(null);
+  const [isGeneratingInterrupt, setIsGeneratingInterrupt] = useState<boolean>(false);
+  const [scheduledInterruptDay, setScheduledInterruptDay] = useState<number>(() =>
+    Math.floor(Math.random() * 5) + 1
+  );
 
   // AI Dynamic Encounter State
   const [activeEncounter, setActiveEncounter] = useState<DynamicNPCEncounter | null>(null);
@@ -152,6 +167,9 @@ export const WeeklySchedulerModal: React.FC<WeeklySchedulerModalProps> = ({
     setHasEncounteredThisWeek(false);
     setActiveEncounter(null);
     setIsGeneratingEncounter(false);
+    setActiveInterrupt(null);
+    setIsGeneratingInterrupt(false);
+    setScheduledInterruptDay(Math.floor(Math.random() * 5) + 1);
     setAccumulatedDeltas({
       coins: stats.allowance,
       stamina: 0,
@@ -179,16 +197,53 @@ export const WeeklySchedulerModal: React.FC<WeeklySchedulerModalProps> = ({
     const actionId = scheduleIds[currentExecutingDayIndex];
     const actionItem = WEEKLY_ACTIONS.find((a) => a.id === actionId) || WEEKLY_ACTIONS[0];
 
-    // Check for interrupt event on this day
-    const interruptOnDay = PREDEFINED_INTERRUPT_EVENTS.find(
-      (e) => e.dayIndex === currentExecutingDayIndex
-    );
+    const shouldTriggerInterrupt =
+      currentExecutingDayIndex === scheduledInterruptDay && !activeInterrupt;
 
     const timer = setTimeout(async () => {
-      if (interruptOnDay && !activeInterrupt) {
-        // Pause and trigger interrupt modal
-        setActiveInterrupt(interruptOnDay);
+      if (shouldTriggerInterrupt) {
+        // Pause and call AI in real time to generate a unique mid-week interrupt event
         setExecutionPhase('interrupt');
+        setIsGeneratingInterrupt(true);
+        try {
+          const aiInterrupt = await generateWeeklyInterruptEvent({
+            aiConfig,
+            stats,
+            gradeYear,
+            weekInYear,
+            dayIndex: currentExecutingDayIndex,
+            dayName,
+            actionItem,
+            npcs,
+            triggeredEventHistory,
+          });
+          setActiveInterrupt(aiInterrupt);
+          if (onRecordTriggeredEvent) {
+            onRecordTriggeredEvent(aiInterrupt.id, aiInterrupt.title);
+          }
+        } catch (_err) {
+          // Only if completely offline or API errors: deduplicated local fallback
+          const historySet = new Set(triggeredEventHistory);
+          const untriggeredPool = PREDEFINED_INTERRUPT_EVENTS.filter(
+            (e) =>
+              !historySet.has(e.id) &&
+              !historySet.has(e.title) &&
+              !triggeredEventHistory.some((h) => h.includes(e.title))
+          );
+          const poolToUse =
+            untriggeredPool.length > 0 ? untriggeredPool : PREDEFINED_INTERRUPT_EVENTS;
+          const pickedFallback = {
+            ...poolToUse[Math.floor(Math.random() * poolToUse.length)],
+            dayIndex: currentExecutingDayIndex,
+            dayName: dayName.replace(/^周/, ''),
+          };
+          setActiveInterrupt(pickedFallback);
+          if (onRecordTriggeredEvent) {
+            onRecordTriggeredEvent(pickedFallback.id, pickedFallback.title);
+          }
+        } finally {
+          setIsGeneratingInterrupt(false);
+        }
         return;
       }
 
@@ -757,8 +812,28 @@ export const WeeklySchedulerModal: React.FC<WeeklySchedulerModalProps> = ({
             </div>
           )}
 
-          {/* PHASE 3: INTERRUPT EVENT MODAL */}
-          {executionPhase === 'interrupt' && activeInterrupt && (
+          {/* PHASE 3: INTERRUPT EVENT LOADING OR MODAL */}
+          {executionPhase === 'interrupt' && isGeneratingInterrupt && (
+            <div className="bg-white border-2 border-amber-400 rounded-3xl p-6 sm:p-8 text-center space-y-4 shadow-xl animate-in zoom-in-95">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-amber-100 to-rose-100 flex items-center justify-center text-rose-600 animate-pulse shadow-inner">
+                <Sparkles className="w-7 h-7" />
+              </div>
+              <div className="space-y-1.5">
+                <h4 className="text-sm sm:text-base font-black text-stone-900">
+                  🔮 命运推演中 / 剧情生成中...
+                </h4>
+                <p className="text-xs text-stone-500 max-w-md mx-auto leading-relaxed">
+                  AI 正在结合高{gradeYear}第{weekInYear}周的日程、你的属性极值与已结识伙伴的过往记忆，现场编排全新的周中突发戏剧冲突
+                </p>
+              </div>
+              <div className="inline-flex items-center gap-2 text-xs font-bold text-amber-800 bg-amber-50 px-4 py-1.5 rounded-full border border-amber-200">
+                <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+                <span>正在检索历史事件去重账本并实时推演...</span>
+              </div>
+            </div>
+          )}
+
+          {executionPhase === 'interrupt' && !isGeneratingInterrupt && activeInterrupt && (
             <div className="bg-white border-2 border-amber-500 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
               <div className="bg-gradient-to-r from-amber-600 to-rose-600 text-white p-3 rounded-xl flex items-center justify-between shadow-sm">
                 <div className="flex items-center gap-2 font-bold text-xs sm:text-sm">
@@ -766,7 +841,7 @@ export const WeeklySchedulerModal: React.FC<WeeklySchedulerModalProps> = ({
                   <span>{activeInterrupt.title}</span>
                 </div>
                 <span className="text-[10px] bg-black/25 px-2 py-0.5 rounded-full font-bold">
-                  【周{activeInterrupt.dayName}突发事件】
+                  【周{activeInterrupt.dayName} · AI 实时突发】
                 </span>
               </div>
 
@@ -946,7 +1021,11 @@ export const WeeklySchedulerModal: React.FC<WeeklySchedulerModalProps> = ({
                         nextWk = 36;
                       }
                     }
-                    onJumpToWeek(nextYr, nextWk, `🚀 极速冲刺：成功跃迁至高${nextYr}第${nextWk}周！学业与能力迅速成长。`);
+                    if (onOpenTimeSkipSummary) {
+                      onOpenTimeSkipSummary(nextYr, nextWk);
+                    } else {
+                      onJumpToWeek(nextYr, nextWk, `🚀 极速冲刺：成功跃迁至高${nextYr}第${nextWk}周！学业与能力迅速成长。`);
+                    }
                     onClose();
                   }}
                   className="px-3.5 py-2 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5"

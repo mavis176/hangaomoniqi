@@ -98,6 +98,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       emoji: '🏡',
     },
     {
+      id: 'assets',
+      name: '高级资产',
+      emoji: '🏢',
+    },
+    {
+      id: 'family',
+      name: '亲情羁绊',
+      emoji: '💖',
+    },
+    {
       id: 'lifePath',
       name: '人生路线',
       emoji: '👑',

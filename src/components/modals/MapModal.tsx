@@ -25,6 +25,7 @@ interface MapModalProps {
   stats: GameStats;
   npcs: NPCClassmate[];
   currentLocationName: string;
+  weeklyCompletedActions?: string[];
   onSetCurrentLocation: (locName: string, bgUrl?: string) => void;
   onExecuteMapAction: (action: MapActionItem, location: MapLocationInfo) => void;
   onOpenPortraitModal?: (npcId?: string) => void;
@@ -35,6 +36,7 @@ export const MapModal: React.FC<MapModalProps> = ({
   stats,
   npcs,
   currentLocationName,
+  weeklyCompletedActions = [],
   onSetCurrentLocation,
   onExecuteMapAction,
   onOpenPortraitModal,
@@ -71,6 +73,9 @@ export const MapModal: React.FC<MapModalProps> = ({
   };
 
   const handleActionClick = (action: MapActionItem, location: MapLocationInfo) => {
+    const actionKey = `weekly_map_action_${action.id}`;
+    if (weeklyCompletedActions.includes(actionKey)) return;
+
     if (action.costStamina > 0 && stats.stamina < action.costStamina) {
       setLastActionResult(`⚠️ 体力不足！需要 ${action.costStamina} 点体力。`);
       return;
@@ -81,7 +86,6 @@ export const MapModal: React.FC<MapModalProps> = ({
     }
 
     onExecuteMapAction(action, location);
-    setLastActionResult(`✨ 成功完成【${action.name}】！${action.successMessage}`);
   };
 
   return (
@@ -406,14 +410,20 @@ export const MapModal: React.FC<MapModalProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {activeLoc.actions.map((act) => {
+                  const actionKey = `weekly_map_action_${act.id}`;
+                  const isDoneThisWeek = weeklyCompletedActions.includes(actionKey);
                   const canAffordStamina = act.costStamina <= 0 || stats.stamina >= act.costStamina;
                   const canAffordCoins = act.costCoins <= 0 || stats.coins >= act.costCoins;
-                  const canExecute = canAffordStamina && canAffordCoins;
+                  const canExecute = !isDoneThisWeek && canAffordStamina && canAffordCoins;
 
                   return (
                     <div
                       key={act.id}
-                      className="bg-white border border-[#dad0bd] rounded-xl p-3 flex flex-col justify-between gap-2 shadow-2xs hover:border-amber-400 transition-all"
+                      className={`border rounded-xl p-3 flex flex-col justify-between gap-2 shadow-2xs transition-all ${
+                        isDoneThisWeek
+                          ? 'bg-stone-100 border-stone-300 opacity-85'
+                          : 'bg-white border-[#dad0bd] hover:border-amber-400'
+                      }`}
                     >
                       <div>
                         <div className="flex items-center justify-between gap-2">
@@ -456,13 +466,24 @@ export const MapModal: React.FC<MapModalProps> = ({
                         onClick={() => handleActionClick(act, activeLoc)}
                         disabled={!canExecute}
                         className={`w-full mt-1 py-1.5 px-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 ${
-                          canExecute
+                          isDoneThisWeek
+                            ? 'bg-stone-300 text-stone-600 cursor-not-allowed border border-stone-400'
+                            : canExecute
                             ? 'bg-gradient-to-r from-[#594939] to-[#715f4d] hover:from-[#6b5845] hover:to-[#85705b] text-white shadow-2xs cursor-pointer active:scale-95'
                             : 'bg-stone-200 text-stone-400 cursor-not-allowed border border-stone-300'
                         }`}
                       >
-                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                        <span>{canExecute ? '立即进行探索' : '条件不足'}</span>
+                        {isDoneThisWeek ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>本周已完成（下周重置）</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                            <span>{canExecute ? '立即探索 (触发AI事件)' : '条件不足'}</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   );

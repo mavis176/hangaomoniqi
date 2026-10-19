@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   X,
   BookOpen,
@@ -6,13 +6,12 @@ import {
   Home,
   FileCheck2,
   Sparkles,
-  Loader2,
   CheckCircle2,
-  AlertCircle,
+  GraduationCap,
 } from 'lucide-react';
 import { GameStats, ExamRecord, AIConfig } from '../../types';
 import { getWeekCalendarInfo } from '../../data/gameData';
-import { generateDynamicNarrative } from '../../services/aiService';
+import { ActionEventCategory } from '../../services/aiService';
 
 interface GradesModalProps {
   onClose: () => void;
@@ -20,42 +19,40 @@ interface GradesModalProps {
   aiConfig?: AIConfig;
   gradeYear?: number;
   weekInYear?: number;
-  lastExamKey?: string;
+  weeklyCompletedActions?: string[];
   onRecordExamDone?: () => void;
   examRecords?: ExamRecord[];
   onTakeExam?: (examType: 'midterm' | 'final' | 'mock' | 'csat') => void;
-  onUpdateStats: (newStats: Partial<GameStats>) => void;
   onNotify: (msg: string) => void;
-  onShowResultModal?: (data: {
-    title: string;
-    description: string;
-    deltas: Partial<GameStats>;
+  onTriggerActionEvent: (params: {
+    weeklyActionKey: string;
+    actionCategory: ActionEventCategory;
+    actionName: string;
+    location: string;
+    baseDeltas: Partial<GameStats>;
     memoryLog: string;
+    onExtraComplete?: () => void;
   }) => void;
 }
 
 export const GradesModal: React.FC<GradesModalProps> = ({
   onClose,
   stats,
-  aiConfig,
   gradeYear = 1,
   weekInYear = 1,
-  lastExamKey,
+  weeklyCompletedActions = [],
   onRecordExamDone,
   examRecords = [],
   onTakeExam,
-  onUpdateStats,
   onNotify,
-  onShowResultModal,
+  onTriggerActionEvent,
 }) => {
-  const [isLoadingExam, setIsLoadingExam] = useState(false);
-
   const weekInfo = getWeekCalendarInfo(gradeYear, weekInYear);
   const milestoneExam = weekInfo.milestoneExam;
-  const isExamWeek = Boolean(milestoneExam);
 
-  const currentWeekKey = `${gradeYear}_${weekInYear}`;
-  const isExamAlreadyTaken = Boolean(lastExamKey) && lastExamKey === currentWeekKey;
+  const isMockExamDone = weeklyCompletedActions.includes('weekly_mock_exam');
+  const isTutoringDone = weeklyCompletedActions.includes('weekly_study_tutoring');
+  const isFamilyTalkDone = weeklyCompletedActions.includes('weekly_family_talk');
 
   // Korean 1~9 Grade system calculation
   const koreanGrade =
@@ -80,91 +77,85 @@ export const GradesModal: React.FC<GradesModalProps> = ({
       ? '首尔圈四年制综合大学 (In-Seoul)'
       : '地方国立大学 / 艺术与职业专科';
 
-  const handleExecuteExam = async () => {
-    if (!isExamWeek) {
-      onNotify('当前非期中/期末/模考大考周，日常不可反复刷考！请推进日程至考场周。');
-      return;
-    }
-    if (isExamAlreadyTaken) {
-      onNotify('本周大考已完成，请推进日程到下一周！');
-      return;
-    }
+  // 1. 模拟测验 / 阶段统考 (每周限 1 次)
+  const handleExecuteMockOrMilestoneExam = () => {
+    if (isMockExamDone) return;
     if (stats.stamina < 15) {
-      onNotify('体力不足 15 点，无法参加统考！请先休息补充精力。');
+      onNotify('体力不足 15 点，无法参加模拟测验！请先休息补充精力。');
       return;
     }
 
-    setIsLoadingExam(true);
-
-    const examTitle = milestoneExam?.title || `高${gradeYear} · 第${weekInYear}周全真统考`;
+    const examTitle = milestoneExam?.title || `高${gradeYear} · 第${weekInYear}周全国联合模拟测验`;
     const examType = milestoneExam?.type || 'mock';
 
     const variance = Math.floor(Math.random() * 5) - 1;
     const score = Math.min(100, Math.max(35, stats.academics + variance));
     const gradeRank =
       score >= 92 ? 1 : score >= 84 ? 2 : score >= 75 ? 3 : score >= 65 ? 4 : score >= 55 ? 5 : 6;
+    const scholarship = gradeRank === 1 ? 50000 : gradeRank === 2 ? 25000 : 10000;
+    const familyDelta = gradeRank <= 2 ? 8 : gradeRank <= 3 ? 4 : 2;
+    const allowanceDelta = gradeRank === 1 ? 8000 : gradeRank === 2 ? 4000 : 1500;
 
-    const allowanceDelta =
-      gradeRank === 1 ? 8000 : gradeRank === 2 ? 4000 : gradeRank >= 5 ? -3000 : 1000;
-    const familyDelta = gradeRank <= 2 ? 8 : gradeRank <= 3 ? 4 : -5;
-    const scholarship = gradeRank === 1 ? 50000 : gradeRank === 2 ? 25000 : 0;
+    onTriggerActionEvent({
+      weeklyActionKey: 'weekly_mock_exam',
+      actionCategory: 'tutoring_exam',
+      actionName: examTitle,
+      location: '首尔女子高中第1大考场',
+      baseDeltas: {
+        academics: 5,
+        stamina: -15,
+        coins: scholarship,
+        family: familyDelta,
+        allowance: allowanceDelta,
+      },
+      memoryLog: `参加【${examTitle}】考出 ${score}分（内申第${gradeRank}等级），获得奖学金激励 ₩${scholarship.toLocaleString()}。`,
+      onExtraComplete: () => {
+        if (onRecordExamDone) onRecordExamDone();
+        if (onTakeExam) onTakeExam(examType);
+      },
+    });
+  };
 
-    let finalNarrative = `考场内涂卡笔沙沙作响，你气定神闲地完成了【${examTitle}】的所有试题，斩获 ${score} 分（全校第 ${gradeRank} 等级）！`;
-
-    try {
-      const res = await generateDynamicNarrative({
-        aiConfig,
-        context: {
-          sceneType: 'exam_event',
-          playerName: '李秀妍',
-          stats,
-          actionName: examTitle,
-          examType,
-          examScore: score,
-          location: '首尔女子高中第1大考场',
-          timeContext: `高${gradeYear}第${weekInYear}周统考日`,
-        },
-      });
-
-      if (res.narrative) {
-        finalNarrative = res.narrative;
-        if (res.dialogue) {
-          finalNarrative += `\n\n💬【考场音效/对话】: ${res.dialogue}`;
-        }
-      }
-    } catch (_err) {
-      console.warn('AI 考试剧情生成降级：', _err);
-    } finally {
-      setIsLoadingExam(false);
+  // 2. 重点学科补习 (每周限 1 次)
+  const handleExecuteSubjectTutoring = () => {
+    if (isTutoringDone) return;
+    if (stats.stamina < 14) {
+      onNotify('体力不足 14 点，无法进行重点学科补习！');
+      return;
     }
 
-    if (onRecordExamDone) onRecordExamDone();
+    onTriggerActionEvent({
+      weeklyActionKey: 'weekly_study_tutoring',
+      actionCategory: 'tutoring_exam',
+      actionName: `高${gradeYear}内申重点学科1对1补习`,
+      location: '首尔女高教务特训室',
+      baseDeltas: {
+        academics: 7,
+        family: 3,
+        stamina: -14,
+      },
+      memoryLog: `完成了高${gradeYear}第${weekInYear}周内申重点学科补习，攻克了薄弱题型。`,
+    });
+  };
 
-    const resultDeltas: Partial<GameStats> = {
-      academics: Math.min(100, stats.academics + 3),
-      stamina: Math.max(0, stats.stamina - 15),
-      coins: stats.coins + scholarship,
-      family: Math.min(100, stats.family + familyDelta),
-      allowance: Math.max(10000, stats.allowance + allowanceDelta),
-    };
+  // 3. 家庭周末夜谈 (每周限 1 次)
+  const handleExecuteFamilyTalk = () => {
+    if (isFamilyTalkDone) return;
+    const allowanceBoost = stats.academics >= 75 ? 5000 : 2500;
 
-    if (onTakeExam) {
-      onTakeExam(examType);
-    }
-
-    if (onShowResultModal) {
-      onShowResultModal({
-        title: `全真大考结算 · ${examTitle}`,
-        description: `${finalNarrative}\n\n📊【成绩单】: 考分 ${score}分 (内申第 ${gradeRank} 等级)\n💰【奖学金与零花钱】: 获得奖学金 ₩${scholarship.toLocaleString()}，每周零花钱调整为 ₩${(stats.allowance + allowanceDelta).toLocaleString()}`,
-        deltas: resultDeltas,
-        memoryLog: `参加了【${examTitle}】，考出 ${score}分（第${gradeRank}等级），斩获奖学金 ₩${scholarship.toLocaleString()}。`,
-      });
-    } else {
-      onUpdateStats(resultDeltas);
-      onNotify(
-        `完成【${examTitle}】！得分: ${score}分 (${gradeRank}等级)，奖学金 +₩${scholarship.toLocaleString()}！`
-      );
-    }
+    onTriggerActionEvent({
+      weeklyActionKey: 'weekly_family_talk',
+      actionCategory: 'class_study',
+      actionName: '家庭周末夜谈与升学规划交流',
+      location: '首尔家中客厅',
+      baseDeltas: {
+        family: 10,
+        mood: 8,
+        allowance: allowanceBoost,
+        darkIndex: -10,
+      },
+      memoryLog: `与父母进行了深入温暖的周末家庭夜谈，家庭关系升温，每周零花钱上调 +₩${allowanceBoost.toLocaleString()}。`,
+    });
   };
 
   return (
@@ -176,10 +167,10 @@ export const GradesModal: React.FC<GradesModalProps> = ({
             <BookOpen className="w-5 h-5 text-[#f5d68e]" />
             <div>
               <h2 className="text-base sm:text-lg font-bold">
-                韩国高中学制评价 · 内申成绩单与家庭关系
+                韩国高中学制评价 · 内申成绩单、重点学科补习与模拟测验
               </h2>
               <p className="text-[11px] text-[#e1ebf2]">
-                阶段性大考影响升学履历、零花钱额度（当前 ₩{stats.allowance.toLocaleString()}/周）与家庭关系
+                重点学科补习与模拟测验每周各限 1 次 · 每次执行均触发 AI 现场事件与抉择弹窗
               </p>
             </div>
           </div>
@@ -229,94 +220,128 @@ export const GradesModal: React.FC<GradesModalProps> = ({
             </div>
           </div>
 
-          {/* Interactive Exam & Family Actions */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Exam Box */}
+          {/* 3 Interactive Academic & Family Action Modules (All Weekly Cooldown = 1) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* 1. Mock Exam / Milestone Exam Box */}
             <div className="bg-[#eae4d8] border border-[#cfc7b8] rounded-xl p-3.5 flex flex-col justify-between">
               <div>
-                <div className="font-bold text-sm text-[#2b2620] flex items-center justify-between">
+                <div className="font-bold text-xs sm:text-sm text-[#2b2620] flex items-center justify-between gap-1">
                   <span className="flex items-center gap-1.5">
-                    <FileCheck2 className="w-4 h-4 text-[#3b5c7a]" />
-                    <span>全国联合学力评价 / 阶段大考考场</span>
+                    <FileCheck2 className="w-4 h-4 text-[#3b5c7a] shrink-0" />
+                    <span>模拟测验 / 阶段统考</span>
                   </span>
-                  {isExamWeek && !isExamAlreadyTaken && (
-                    <span className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded-md font-bold animate-pulse">
-                      大考周就绪
-                    </span>
-                  )}
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-900">
+                    每周限1次
+                  </span>
                 </div>
 
                 <p className="text-xs text-[#5e5548] mt-1.5 leading-relaxed">
-                  {isExamWeek
-                    ? `当前为【${milestoneExam?.title}】！点击进行全真大考测评（消耗15体力），取得1~2等级可斩获高额奖学金与零花钱上调！`
-                    : '考试属于重大阶段性节点，日常不可反复刷考。请推进日程至期中/期末/模考等统考大考周（第6/12/15/21/24/29/34周）！'}
+                  {milestoneExam
+                    ? `本周为【${milestoneExam.title}】！参加统考可赢取奖学金与零花钱上调。`
+                    : '参加本周全国联合学力模拟测验（消耗15体力），检验内申排名并赢取测验奖学金！'}
                 </p>
               </div>
 
-              <div className="mt-3">
-                <button
-                  onClick={handleExecuteExam}
-                  disabled={!isExamWeek || isExamAlreadyTaken || isLoadingExam}
-                  className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold cursor-pointer flex items-center justify-center gap-1.5 transition-all ${
-                    !isExamWeek
-                      ? 'bg-gray-300 border border-gray-400 text-gray-600 cursor-not-allowed opacity-80'
-                      : isExamAlreadyTaken
-                      ? 'bg-amber-200 border border-amber-300 text-amber-900 cursor-not-allowed'
-                      : 'bg-[#4b5c6b] hover:bg-[#3d4c59] text-white shadow-md'
-                  }`}
-                >
-                  {!isExamWeek ? (
-                    <span className="flex items-center gap-1">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      <span>非统考大考周，日常不可反复刷考</span>
-                    </span>
-                  ) : isExamAlreadyTaken ? (
-                    <span className="flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-amber-800" />
-                      <span>本周大考已完成，请推进日程</span>
-                    </span>
-                  ) : isLoadingExam ? (
-                    <span className="flex items-center gap-1">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                      <span>AI 正在生成全真考场微描写...</span>
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                      <span>参加【{milestoneExam?.title}】(-15体力)</span>
-                    </span>
-                  )}
-                </button>
-              </div>
+              <button
+                onClick={handleExecuteMockOrMilestoneExam}
+                disabled={isMockExamDone}
+                className={`mt-3 w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  isMockExamDone
+                    ? 'bg-stone-300 border border-stone-400 text-stone-600 cursor-not-allowed'
+                    : 'bg-[#4b5c6b] hover:bg-[#3d4c59] text-white shadow-md cursor-pointer'
+                }`}
+              >
+                {isMockExamDone ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>本周已完成（下周重置）</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>{milestoneExam ? `参加【${milestoneExam.title}】` : '参加本周模拟测验 (-15体力)'}</span>
+                  </>
+                )}
+              </button>
             </div>
 
-            {/* Family Conversation Box */}
+            {/* 2. Key Subject Tutoring Box */}
             <div className="bg-[#eae4d8] border border-[#cfc7b8] rounded-xl p-3.5 flex flex-col justify-between">
               <div>
-                <div className="font-bold text-sm text-[#2b2620] flex items-center gap-1.5">
-                  <Home className="w-4 h-4 text-[#7a5c3b]" />
-                  <span>家庭周末夜谈 & 申请上调零花钱</span>
+                <div className="font-bold text-xs sm:text-sm text-[#2b2620] flex items-center justify-between gap-1">
+                  <span className="flex items-center gap-1.5">
+                    <GraduationCap className="w-4 h-4 text-indigo-700 shrink-0" />
+                    <span>重点学科补习特训</span>
+                  </span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-900">
+                    每周限1次
+                  </span>
+                </div>
+
+                <p className="text-xs text-[#5e5548] mt-1.5 leading-relaxed">
+                  针对国语、数学、英语压轴题进行1对1专项补习（消耗14体力），触发课堂钻研抉择事件，学业+7！
+                </p>
+              </div>
+
+              <button
+                onClick={handleExecuteSubjectTutoring}
+                disabled={isTutoringDone}
+                className={`mt-3 w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  isTutoringDone
+                    ? 'bg-stone-300 border border-stone-400 text-stone-600 cursor-not-allowed'
+                    : 'bg-indigo-700 hover:bg-indigo-800 text-white shadow-md cursor-pointer'
+                }`}
+              >
+                {isTutoringDone ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>本周已完成（下周重置）</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>开始重点学科补习 (-14体力)</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* 3. Family Conversation Box */}
+            <div className="bg-[#eae4d8] border border-[#cfc7b8] rounded-xl p-3.5 flex flex-col justify-between">
+              <div>
+                <div className="font-bold text-xs sm:text-sm text-[#2b2620] flex items-center justify-between gap-1">
+                  <span className="flex items-center gap-1.5">
+                    <Home className="w-4 h-4 text-[#7a5c3b] shrink-0" />
+                    <span>家庭夜谈 & 零花钱申请</span>
+                  </span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-900">
+                    每周限1次
+                  </span>
                 </div>
                 <p className="text-xs text-[#5e5548] mt-1.5 leading-relaxed">
-                  与父母坦诚交流近期的校园生活与未来规划，修复家庭隔阂、降低备考压力，并根据学业表现提升零花钱额度。
+                  与父母坦诚交流近期校园生活与升学规划，触发家庭对话抉择，修复隔阂并上调每周零花钱额度。
                 </p>
               </div>
               <button
-                onClick={() => {
-                  const allowanceBoost = stats.academics >= 75 ? 5000 : 2000;
-                  onUpdateStats({
-                    family: Math.min(100, stats.family + 10),
-                    mood: Math.min(100, stats.mood + 8),
-                    allowance: stats.allowance + allowanceBoost,
-                    darkIndex: Math.max(0, stats.darkIndex - 10),
-                  });
-                  onNotify(
-                    `与父母进行了温暖的家庭长谈！家庭关系+10，压力降低，每周零花钱上调 +₩${allowanceBoost.toLocaleString()}！`
-                  );
-                }}
-                className="mt-3 w-full py-2.5 bg-[#7a6248] hover:bg-[#66513a] text-white rounded-xl text-xs font-bold cursor-pointer"
+                onClick={handleExecuteFamilyTalk}
+                disabled={isFamilyTalkDone}
+                className={`mt-3 w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  isFamilyTalkDone
+                    ? 'bg-stone-300 border border-stone-400 text-stone-600 cursor-not-allowed'
+                    : 'bg-[#7a6248] hover:bg-[#66513a] text-white shadow-md cursor-pointer'
+                }`}
               >
-                与父母温馨谈心 (+10家庭 & 上调零花钱)
+                {isFamilyTalkDone ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>本周已完成（下周重置）</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>与父母温馨谈心 (+家庭 & 零花钱)</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -325,11 +350,11 @@ export const GradesModal: React.FC<GradesModalProps> = ({
           <div className="bg-white border border-[#d6cfc2] rounded-xl p-3.5">
             <div className="font-bold text-xs sm:text-sm text-[#2b2620] mb-2 flex items-center gap-1.5">
               <Award className="w-4 h-4 text-amber-600" />
-              <span>历次期中/期末/模考/CSAT高考成绩档案 ({examRecords.length}次记录)</span>
+              <span>历次模拟测验/期中/期末/CSAT高考成绩档案 ({examRecords.length}次记录)</span>
             </div>
             {examRecords.length === 0 ? (
               <div className="text-xs text-[#7a7062] py-4 text-center">
-                随着周回合推进（第6周期中考、第12周6月模考、第15周期末考等）在考场周参加测验，你的所有大考成绩单将记录于此。
+                点击上方【参加本周模拟测验】即可记录你的历次考场成绩单与内申等级评定。
               </div>
             ) : (
               <div className="space-y-2 max-h-48 overflow-y-auto">
@@ -345,7 +370,9 @@ export const GradesModal: React.FC<GradesModalProps> = ({
                       </span>
                     </div>
                     <div className="flex items-center gap-3 font-bold">
-                      <span className="text-[#2b4c6e]">得分: {rec.score}分 ({rec.gradeRank}等级)</span>
+                      <span className="text-[#2b4c6e]">
+                        得分: {rec.score}分 ({rec.gradeRank}等级)
+                      </span>
                       <span className="text-emerald-700">{rec.evaluation}</span>
                     </div>
                   </div>

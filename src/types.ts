@@ -128,7 +128,8 @@ export interface GameStats {
   darkIndex: number;       // 压力/阴霾值 (0 - 100)
   secretUnlocked: boolean; // 是否解锁隐藏真结局秘密线
 
-  // 新增：情境特质与倦怠系统
+  // 新增：名声/声望与情境特质系统
+  reputation?: number;      // 圈内声望与名气
   activeTraits?: PlayerTrait[];
   burnoutLevel?: number;   // 0 - 100 (专注倦怠度)
 }
@@ -397,6 +398,7 @@ export interface AIConfig {
 export interface ChatMessage {
   sender: 'user' | 'npc';
   text: string;
+  bubbles?: string[];
   timeLabel?: string;
   innerThought?: string;
   actionDesc?: string;
@@ -438,9 +440,50 @@ export interface SNSPost {
   weekLabel: string;
   caption: string;
   tag: string;
+  imageUrl?: string;
   likes: number;
   followerGain: number;
   npcComments: { npcName: string; text: string }[];
+}
+
+export interface FanBubbleMessageItem {
+  fanName: string;
+  fanRole: string;
+  message: string;
+  loyaltyGain: number;
+}
+
+export interface FanBubblePlayerState {
+  identityStatus: string;
+  recentSchedule: string;
+  fanPersonas?: string[];
+  playerName?: string;
+  stats?: GameStats;
+  weekLabel?: string;
+  aiConfig?: AIConfig;
+}
+
+export interface FanBubbleChatTurn {
+  sender: 'fan' | 'user';
+  text: string;
+  bubbles?: string[];
+  timeLabel: string;
+  emotionTag?: string;
+  loyaltyDelta?: number;
+}
+
+export interface FanBubbleThread {
+  id: string;
+  fanName: string;
+  fanRole: string;
+  avatarEmoji: string;
+  badgeColor: string;
+  loyalty: number;
+  pendingLoyaltyGain: number;
+  hasUnread: boolean;
+  unreadCount: number;
+  updatedAtLabel: string;
+  messages: FanBubbleChatTurn[];
 }
 
 export interface GameEnding {
@@ -526,3 +569,124 @@ export interface LifePathProgress {
   chaebol: ChaebolWifeState;
   activePathUnlocked: boolean;
 }
+
+export interface HousingItem {
+  id: string;
+  name: string;
+  koreanName: string;
+  price: number;
+  staminaBonusPerTurn: number;
+  moodBonusPerTurn: number;
+  darkIndexReductionPerTurn: number;
+  socialBonus: number;
+  image: string;
+  desc: string;
+  locationLabel: string;
+  tier: 'semi_basement' | 'apartment' | 'penthouse' | 'mansion';
+}
+
+export interface VehicleItem {
+  id: string;
+  name: string;
+  koreanName: string;
+  price: number;
+  socialBonus: number;
+  appearanceBonus: number;
+  unlockedEventsDesc: string;
+  image: string;
+  desc: string;
+  tier: 'public' | 'van' | 'supercar';
+}
+
+export interface PlayerAssetsState {
+  currentHousingId: string;
+  currentVehicleId: string;
+  ownedHousingIds: string[];
+  ownedVehicleIds: string[];
+}
+
+export interface FamilyInteractionLog {
+  id: string;
+  dateStr: string;
+  type: 'allowance' | 'dinner' | 'report';
+  title: string;
+  summary: string;
+  coinsDelta?: number;
+  familyDelta?: number;
+  staminaDelta?: number;
+}
+
+export interface FamilyMilestoneItem {
+  id: string;
+  title: string;
+  categoryLabel: string;
+  rewardCoins: number;
+  newsSummary: string;
+  createdAtStr: string;
+}
+
+export interface DispatchScandalLeak {
+  id: string;
+  title: string;
+  headline: string;
+  targetNpcName?: string;
+  isPlayerTarget?: boolean;
+  causalReason?: string;
+  leakCategory: 'romance' | 'nightlife' | 'attitude' | 'agency_dispute';
+  hoursRemaining: number;
+  evidencePhoto: string;
+  status: 'pending' | 'resolved_bought' | 'resolved_statement' | 'resolved_counter' | 'leaked_disaster';
+  buyoutCostKRW: number;
+  statementInfluenceCost: number;
+  riskPct: number;
+  summary: string;
+  leakDateLabel: string;
+  userReaction?: 'spectate' | 'like' | 'sabotage' | null;
+  reactionResultText?: string;
+  netizenComments?: { name: string; text: string; likes: number }[];
+}
+
+export interface CoupangShopItem {
+  id: string;
+  name: string;
+  koreanName: string;
+  category: 'uniform' | 'couture' | 'stage' | 'luxury_bag' | 'skincare';
+  priceKRW: number;
+  appearanceBonus: number;
+  socialBonus: number;
+  darkIndexReduction: number;
+  image: string;
+  tag: string;
+  description: string;
+  owned?: boolean;
+}
+
+export interface KTalkMessage {
+  id: string;
+  sender: 'vip' | 'player';
+  text: string;
+  timestamp: string;
+  eqScore?: number;
+}
+
+export interface KTalkIndustryContact {
+  id: string;
+  name: string;
+  role: string;
+  category: 'pd' | 'producer' | 'exec' | 'rival';
+  avatar: string;
+  influenceLevel: number;
+  lastMessage: string;
+  unread: boolean;
+  messages: KTalkMessage[];
+  pendingOffer?: {
+    id: string;
+    title: string;
+    rewardCoins: number;
+    followerGain: number;
+    influenceGain: number;
+    desc: string;
+  };
+}
+
+
