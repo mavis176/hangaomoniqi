@@ -10,6 +10,8 @@ import {
   WeeklyActionItem,
   RelationshipStage,
   GameEnding,
+  PlayerTrait,
+  InterruptEvent,
 } from '../types';
 import { CURATED_STORY_EVENTS } from './eventsPool';
 import {
@@ -41,8 +43,9 @@ export const initialStats: GameStats = {
   clubRank: '见习部员',
   clubTrophies: [],
   agencyId: null,
-  traineeGrade: 'C班练习生',
-  traineeProgress: 15,
+  traineeGrade: '未签约普通学生',
+  traineeProgress: 0,
+  isDebutedIdol: false,
   vocalSkill: 34,
   danceSkill: 38,
   rapSkill: 30,
@@ -450,6 +453,10 @@ export const initialNPCs: NPCClassmate[] = [
     romancePoints: 22,
     mbti: 'INFP 治愈系同桌',
     interests: ['纯爱校园条漫连载', '草莓甜品品鉴', '水彩手帐贴纸', '文具小店打卡'],
+    nicknameToPlayer: "小秀妍",
+    speakingStyle: "温柔软萌、同桌闺蜜感、爱用草莓甜品比喻与感叹词、情绪价值拉满、语气亲昵随和",
+    forbiddenWords: ["请问有什么可以帮您", "我非常乐意", "好的呢", "作为人工智能", "很高兴为您", "尊敬的顾客"],
+    attitudeByAffection: {"low": "稍微有点害羞拘谨，客气有礼，说话温声细语保持社交界限。", "mid": "主动塞给你草莓软糖，分享私下偷偷画的漫画草稿，拉着你吐槽老师和考试。", "high": "对你毫无保留地依恋，遇到难过的事第一时间紧紧贴着你，还会对你和其他同学走得太近而偷偷吃醋。"},
     speechStyle: '温柔软萌、同桌闺蜜感、爱用感叹词与甜品比喻、情绪价值拉满',
     memoryKeywords: ['开学第一天同桌', '草莓软糖秘密', 'Webtoon条漫连载', '济州岛毕业看海约定'],
     avatar: AVATAR_NPC_MINYOUNG,
@@ -476,6 +483,10 @@ export const initialNPCs: NPCClassmate[] = [
     romancePoints: 16,
     mbti: 'ESFP 元气气氛组',
     interests: ['圣水洞网红探店', '人生四格拍贴收藏', '美妆与美甲穿搭', 'K-Pop新歌随舞打卡'],
+    nicknameToPlayer: "秀妍宝",
+    speakingStyle: "超级自来熟高亢元气、满屏波浪号与感叹号、爱用圣水洞流行语、八卦雷达秒回",
+    forbiddenWords: ["您好", "请问有什么可以帮您", "非常抱歉", "谨遵指令", "作为AI"],
+    attitudeByAffection: {"low": "自来熟打招呼，热情推荐圣水洞彩妆，但还没把你拉进核心闺蜜圈。", "mid": "天天拉着你拍人生四格、抢OliveYoung新品、吐槽东大门进货的搞怪日常。", "high": "认定你是她全宇宙第一好的神仙闺蜜，随时为你冲锋陷阵，有任何好事第一个想到你。"},
     speechStyle: '超级活泼自来熟、满屏感叹号与爱心、热衷分享第一手校园八卦',
     memoryKeywords: ['圣水洞人生四格拍贴', '校门口辣年糕打卡', '八卦雷达秒回'],
     avatar: AVATAR_NPC_JIYOUNG,
@@ -501,6 +512,10 @@ export const initialNPCs: NPCClassmate[] = [
     romancePoints: 15,
     mbti: 'INTJ 清冷极客学霸',
     interests: ['CSAT大考压轴真题破解', '精萃无糖冰美式', '德系极简钢笔手感', '神经科学与认知心理学'],
+    nicknameToPlayer: "喂",
+    speakingStyle: "清冷从容、句式简短严密、嘴硬心软、高冷傲娇语气、经常用轻哼或反问句",
+    forbiddenWords: ["亲爱的", "太棒啦~", "请问有什么可以帮您", "作为AI", "好的呢", "宝贝"],
+    attitudeByAffection: {"low": "眼神高冷看真题，淡淡说\"请不要在我刷题时发出噪音\"。", "mid": "傲娇挑刺\"这道题你居然做错了\"，却顺手在你草稿纸上画好辅助线并推给你半杯冰美式。", "high": "彻底卸下冷漠伪装，深夜自习室靠在你肩膀上流露脆弱，拉着你的袖子低声要求你留在她视野里。"},
     speechStyle: '清冷从容、逻辑严密、嘴硬心软、偶尔露出微红傲娇的小情绪',
     memoryKeywords: ['大峙洞分班考并列第一', '冰美式复盘', '深夜自习室并肩刷题', '专属几何辅助线'],
     avatar: AVATAR_NPC_SORA,
@@ -526,6 +541,10 @@ export const initialNPCs: NPCClassmate[] = [
     romancePoints: 20,
     mbti: 'ENFJ 治愈白月光',
     interests: ['木吉他弹唱与即兴编曲', '校园广播站午间电台', '黑胶唱片淘碟', '胶片相机记录日常'],
+    nicknameToPlayer: "秀妍学妹",
+    speakingStyle: "如春风般清润舒缓、充满广播电台DJ质感的温润语气、礼貌体贴又有深情含蓄感",
+    forbiddenWords: ["作为AI", "好的，亲", "系统提示", "请问您有什么需要", "客服"],
+    attitudeByAffection: {"low": "温和有礼的社团学长，保持着优雅适度的社交距离。", "mid": "在广播室为你预留专属点歌时间，下雨天为你撑伞，分享他珍藏的雨声钢琴磁带。", "high": "眼神里满是掩饰不住的温柔与独占欲，为你弹奏专属编曲，低声坦白他的音乐只为你而响。"},
     speechStyle: '如春风般清润温和、体贴细致、句式舒缓有礼、善于倾听与给予安心感',
     memoryKeywords: ['广播室点播专属吉他曲', '雨声钢琴磁带书签', '汉江樱花树下约定', '温麦茶'],
     avatar: AVATAR_NPC_EUNWOO,
@@ -551,6 +570,10 @@ export const initialNPCs: NPCClassmate[] = [
     romancePoints: 24,
     mbti: 'ESTP 直球运动系王牌',
     interests: ['女排大力跳发与扣球', '汉江夜骑单车', '探访校门口炸鸡年糕店', '球鞋与运动护腕收藏'],
+    nicknameToPlayer: "小秀妍",
+    speakingStyle: "直球爽朗、大声欢笑、护短坦率、干脆利落不拖泥带水、被夸奖时罕见结巴脸红",
+    forbiddenWords: ["恕我不能", "请问有什么可以帮您", "作为AI", "客套话", "好的呢"],
+    attitudeByAffection: {"low": "单手转着排球，大大咧咧招呼\"新来的？跟紧点别受伤\"。", "mid": "排球测试时帅气垫球解围，一把拉过你披上运动外套\"以后体育课我罩你\"。", "high": "护短到极致，谁让你受委屈她直接开怼，被你温柔看着时会害羞得满脸通红。"},
     speechStyle: '飒爽直球、坦率护短、大声欢笑、喜欢身体力行护着秀妍、被夸时罕见脸红',
     memoryKeywords: ['排球测试垫球解围', '体育课我罩你', '运动外套披肩', '冰镇宝矿力特饮'],
     avatar: AVATAR_NPC_HAEIN,
@@ -576,6 +599,10 @@ export const initialNPCs: NPCClassmate[] = [
     romancePoints: 18,
     mbti: 'ISFP 舞台艺术家/前C位',
     interests: ['高难度K-Pop舞蹈编创', '美式街头复古穿搭', '小众独立R&B黑胶', '天台晚风吹风听歌'],
+    nicknameToPlayer: "李秀妍",
+    speakingStyle: "微哑冷艳、说话极简直击要害、酷妹气场、洛杉矶街头感、私下对秀妍偏心保护",
+    forbiddenWords: ["好的呢", "为您服务", "请问有什么可以帮您", "作为AI", "亲"],
+    attitudeByAffection: {"low": "戴着降噪耳机在天台练舞，眼神微冷\"借过，别打扰我\"。", "mid": "摘下一侧耳机塞进你耳朵里，分享未公开R&B黑胶，冷酷为你挡掉刺探隐私的骚扰。", "high": "在你面前化为软刺，主动贴着你颈窝流露退社与洛杉矶的伤痕，将你视为唯一心灵避风港。"},
     speechStyle: '微哑冷艳、说话简练直击要害、不随波逐流、私下对秀妍极其偏心与护短',
     memoryKeywords: ['转学第一天递课表', '天台共享降噪耳机', '未公开R&B曲', '四大社解约秘密'],
     avatar: AVATAR_NPC_YUNA,
@@ -601,6 +628,10 @@ export const initialNPCs: NPCClassmate[] = [
     romancePoints: 16,
     mbti: 'ISTJ 铁面风纪会长',
     interests: ['校园章程与活动企划', '学校后山喂养流浪小猫', '逻辑辩论与法学条文', '金丝眼镜与西装领带整理'],
+    nicknameToPlayer: "李秀妍同学",
+    speakingStyle: "克制严谨、一板一眼、原则性极强、用规章制度说话，但句尾总是强行破例纵容你",
+    forbiddenWords: ["亲爱的", "萌萌哒", "作为AI", "为您效劳", "好哒"],
+    attitudeByAffection: {"low": "推了推金丝眼镜，严肃扣分\"李秀妍同学，请严格遵守校规\"。", "mid": "叹气说\"这次算帮学生会搬资料破例，下不为例\"，放学后偷偷带你去看他喂流浪猫。", "high": "对你彻底无可救药地偏袒破例，在会议上公然袒护你，金丝眼镜后的眼神沉溺而失控。"},
     speechStyle: '克制严谨、一板一眼、原则性极强、但在秀妍面前总是屡屡破例暗中纵容',
     memoryKeywords: ['执勤免除扣分', '后山流浪猫秘密基地', '金丝眼镜下破例', '学生会校园祭方案'],
     avatar: AVATAR_NPC_JAEMIN,
@@ -626,6 +657,10 @@ export const initialNPCs: NPCClassmate[] = [
     romancePoints: 0,
     mbti: 'INFJ 知性温暖引路人',
     interests: ['草本洋甘菊茶调配', '近代散文诗集阅读', '学生心理健康倾听', '干花压花明信片制作'],
+    nicknameToPlayer: "秀妍",
+    speakingStyle: "知性优雅、语调温和从容、充满哲理与包容、像长姐兼避风港般给予无条件接纳",
+    forbiddenWords: ["好的呢", "作为AI", "请问有什么可以帮您", "萌萌哒"],
+    attitudeByAffection: {"low": "递上温热洋甘菊茶，温柔提醒\"身体不舒服随时可以在校医室休息\"。", "mid": "听你倾诉学业与青春烦恼，用哲理抚平焦虑，为你借阅白玉兰文学笔记。", "high": "毫无保留地对你敞开过往的挣扎与希望，永远是你最值得信赖的避风港与人生引路人。"},
     speechStyle: '知性优雅、语调温和从容、充满哲思与包容、像避风港一样给予无条件接纳',
     memoryKeywords: ['洋甘菊温茶倾听', '白玉兰十年前秘密', '成绩单外的人生', '治愈小说借阅'],
     avatar: AVATAR_NPC_EUNJUNG,
@@ -1171,3 +1206,138 @@ export const initialMemories: MemoryEntry[] = [
 ];
 
 export const randomEvents: RandomEvent[] = CURATED_STORY_EVENTS;
+
+// ==================== 情境特质库 (Traits) ====================
+export const PREDEFINED_PLAYER_TRAITS: PlayerTrait[] = [
+  {
+    id: 'trait_balanced_master',
+    name: '平衡调控大师',
+    icon: '🧘',
+    desc: '周日常规划极为科学均衡，兼顾学习、练习、社交与充沛休整。',
+    effectDesc: '体力消耗 -15%，暗黑压力增长 -30%，判定爆发率提升',
+    category: 'positive',
+  },
+  {
+    id: 'trait_lone_wolf',
+    name: '练习室独行侠',
+    icon: '🐺',
+    desc: '长期独自疯狂扎根练习室与读书室，习惯独来独往冲刺。',
+    effectDesc: '个人单项训练收益 +15%，但团队配合度评价 -20%',
+    category: 'neutral',
+  },
+  {
+    id: 'trait_ambience_maker',
+    name: '气氛组担当',
+    icon: '🌸',
+    desc: '首尔女高交际花，走到哪里都能把氛围拉满。',
+    effectDesc: 'NPC好感度与粉丝增幅 +25%，考核失误时容易被宽容力保',
+    category: 'positive',
+  },
+  {
+    id: 'trait_daechi_involution',
+    name: '大峙洞卷王',
+    icon: '🏛️',
+    desc: '高强度疯狂刷题备考，眼中只有全校内申第一。',
+    effectDesc: '所有考试卷面分 +12%，但容易引发专注倦怠',
+    category: 'neutral',
+  },
+  {
+    id: 'trait_epiphany_star',
+    name: '顿悟灵感体质',
+    icon: '✨',
+    desc: '极具艺术与情感敏锐度，擅长在低谷与高压中自我悟道突破。',
+    effectDesc: '顿悟暴击概率 +35%，触发顿悟时直接获得爆破级双倍加成',
+    category: 'special',
+  },
+];
+
+// ==================== 7天日程推进中：突发打断事件库 (Interrupts) ====================
+export const PREDEFINED_INTERRUPT_EVENTS: InterruptEvent[] = [
+  {
+    id: 'interrupt_friend_cry',
+    dayIndex: 2, // 周三
+    dayName: '周三',
+    title: '🚨 突发事件：同桌朴敏英在楼道悄悄抽泣',
+    category: 'bond',
+    npcId: 'npc_1',
+    npcName: '朴敏英',
+    npcAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400',
+    story: '周三午后，你在走廊拐角看到同桌朴敏英一个人低着头抹眼泪，桌上散落着刚发下来的模拟试卷。她声音微颤：“秀妍，我最近真的好累，感觉怎么复习都达不到父母的期待……”',
+    choiceStick: {
+      label: '【坚守原计划】递上纸巾后按原定行程离开',
+      resultDesc: '敏英收下纸巾默默点了点头。你按原计划完成了行程，但心里隐隐有些挂念。',
+      effect: { mood: -2 },
+    },
+    choiceHandle: {
+      label: '【推掉今天安排】买草莓牛奶去天台倾听并开导她',
+      resultDesc: '你们在阳光洒落的天台上聊了很久，敏英重拾笑容！不仅收获了深刻羁绊，还解锁了新特质！',
+      effect: { mood: 12, social: 8 },
+      npcFavDelta: 15,
+      unlockedTrait: PREDEFINED_PLAYER_TRAITS[2], // 气氛组担当
+    },
+  },
+  {
+    id: 'interrupt_trainee_inspection',
+    dayIndex: 3, // 周四
+    dayName: '周四',
+    title: '👑 突发选拔：K-Pop社长/导师突击检查练习室',
+    category: 'trainee',
+    npcId: 'npc_6',
+    npcName: '千宥娜',
+    npcAvatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=400',
+    story: '企划社导师突然来到练习室查岗：“今天的个人直拍表现力考核提前！所有人立刻准备全开麦展现最强状态！”',
+    choiceStick: {
+      label: '【坚守原计划】向导师请假，按原计划离开',
+      resultDesc: '导师对你中途离场略显遗憾，认为你错失了一次绝佳展现机会。',
+      effect: { traineeProgress: -2 },
+    },
+    choiceHandle: {
+      label: '【推掉今天安排】立刻换舞鞋登台全开麦震撼开唱！',
+      resultDesc: '你凭借惊艳的镜头管理与爆破力直拍震撼全场！导师当场夸赞你的敬业与大心脏姿态！',
+      effect: { traineeProgress: 10, cameraSkill: 8, snsFollowers: 1200 },
+      unlockedTrait: PREDEFINED_PLAYER_TRAITS[4], // 顿悟灵感体质
+    },
+  },
+  {
+    id: 'interrupt_rooftop_epiphany',
+    dayIndex: 4, // 周五
+    dayName: '周五',
+    title: '🎸 突发奇遇：天台上传来清冷的吉他独奏',
+    category: 'rare',
+    npcId: 'npc_3',
+    npcName: '韩素拉',
+    npcAvatar: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&q=80&w=400',
+    story: '放学时分，你在天台遇到对着晚霞试音的韩素拉。晚风吹动她的发丝，微光落落。她看向你：“要听听我刚写完的主歌旋律吗？”',
+    choiceStick: {
+      label: '【坚守原计划】打个招呼后按原计划离开学校',
+      resultDesc: '原计划按时完成，但错过了与素拉分享晚霞音符的浪漫契机。',
+      effect: {},
+    },
+    choiceHandle: {
+      label: '【推掉今天安排】并肩坐在天台台阶上倾听与和声',
+      resultDesc: '晚霞将天空染成紫粉色，你们的声音在天空中完美重叠！你瞬间触发了【艺术顿悟】！',
+      effect: { clubSkill: 12, vocalSkill: 10, mood: 15 },
+      npcFavDelta: 16,
+      unlockedTrait: PREDEFINED_PLAYER_TRAITS[4], // 顿悟灵感体质
+    },
+  },
+  {
+    id: 'interrupt_teacher_inspection',
+    dayIndex: 1, // 周二
+    dayName: '周二',
+    title: '🔍 突发查岗：风纪纪律检查与走廊巡视',
+    category: 'teacher',
+    story: '班主任与教导主任正在各班级走廊检查校服着装与课堂纪律，看到有同学正在私下分发小吃。',
+    choiceStick: {
+      label: '【坚守原计划】保持肃静端坐，按原计划完成学习任务',
+      resultDesc: '获得了教导主任的肯定眼神，学业秩序井然。',
+      effect: { academics: 3 },
+    },
+    choiceHandle: {
+      label: '【推掉今天安排】上前用提问吸引老师注意力打掩护',
+      resultDesc: '成功化解尴尬！班上同学对你的侠义与机智佩服不已！',
+      effect: { social: 8, mood: 6 },
+      unlockedTrait: PREDEFINED_PLAYER_TRAITS[2], // 气氛组担当
+    },
+  },
+];

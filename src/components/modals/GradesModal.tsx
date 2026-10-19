@@ -1,24 +1,62 @@
-import React from 'react';
-import { X, BookOpen, Award, Home, TrendingUp, FileCheck2, HeartHandshake } from 'lucide-react';
-import { GameStats, ExamRecord } from '../../types';
+import React, { useState } from 'react';
+import {
+  X,
+  BookOpen,
+  Award,
+  Home,
+  FileCheck2,
+  Sparkles,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+} from 'lucide-react';
+import { GameStats, ExamRecord, AIConfig } from '../../types';
+import { getWeekCalendarInfo } from '../../data/gameData';
+import { generateDynamicNarrative } from '../../services/aiService';
 
 interface GradesModalProps {
   onClose: () => void;
   stats: GameStats;
+  aiConfig?: AIConfig;
+  gradeYear?: number;
+  weekInYear?: number;
+  lastExamKey?: string;
+  onRecordExamDone?: () => void;
   examRecords?: ExamRecord[];
   onTakeExam?: (examType: 'midterm' | 'final' | 'mock' | 'csat') => void;
   onUpdateStats: (newStats: Partial<GameStats>) => void;
   onNotify: (msg: string) => void;
+  onShowResultModal?: (data: {
+    title: string;
+    description: string;
+    deltas: Partial<GameStats>;
+    memoryLog: string;
+  }) => void;
 }
 
 export const GradesModal: React.FC<GradesModalProps> = ({
   onClose,
   stats,
+  aiConfig,
+  gradeYear = 1,
+  weekInYear = 1,
+  lastExamKey,
+  onRecordExamDone,
   examRecords = [],
   onTakeExam,
   onUpdateStats,
   onNotify,
+  onShowResultModal,
 }) => {
+  const [isLoadingExam, setIsLoadingExam] = useState(false);
+
+  const weekInfo = getWeekCalendarInfo(gradeYear, weekInYear);
+  const milestoneExam = weekInfo.milestoneExam;
+  const isExamWeek = Boolean(milestoneExam);
+
+  const currentWeekKey = `${gradeYear}_${weekInYear}`;
+  const isExamAlreadyTaken = Boolean(lastExamKey) && lastExamKey === currentWeekKey;
+
   // Korean 1~9 Grade system calculation
   const koreanGrade =
     stats.academics >= 92
@@ -42,6 +80,93 @@ export const GradesModal: React.FC<GradesModalProps> = ({
       ? '首尔圈四年制综合大学 (In-Seoul)'
       : '地方国立大学 / 艺术与职业专科';
 
+  const handleExecuteExam = async () => {
+    if (!isExamWeek) {
+      onNotify('当前非期中/期末/模考大考周，日常不可反复刷考！请推进日程至考场周。');
+      return;
+    }
+    if (isExamAlreadyTaken) {
+      onNotify('本周大考已完成，请推进日程到下一周！');
+      return;
+    }
+    if (stats.stamina < 15) {
+      onNotify('体力不足 15 点，无法参加统考！请先休息补充精力。');
+      return;
+    }
+
+    setIsLoadingExam(true);
+
+    const examTitle = milestoneExam?.title || `高${gradeYear} · 第${weekInYear}周全真统考`;
+    const examType = milestoneExam?.type || 'mock';
+
+    const variance = Math.floor(Math.random() * 5) - 1;
+    const score = Math.min(100, Math.max(35, stats.academics + variance));
+    const gradeRank =
+      score >= 92 ? 1 : score >= 84 ? 2 : score >= 75 ? 3 : score >= 65 ? 4 : score >= 55 ? 5 : 6;
+
+    const allowanceDelta =
+      gradeRank === 1 ? 8000 : gradeRank === 2 ? 4000 : gradeRank >= 5 ? -3000 : 1000;
+    const familyDelta = gradeRank <= 2 ? 8 : gradeRank <= 3 ? 4 : -5;
+    const scholarship = gradeRank === 1 ? 50000 : gradeRank === 2 ? 25000 : 0;
+
+    let finalNarrative = `考场内涂卡笔沙沙作响，你气定神闲地完成了【${examTitle}】的所有试题，斩获 ${score} 分（全校第 ${gradeRank} 等级）！`;
+
+    try {
+      const res = await generateDynamicNarrative({
+        aiConfig,
+        context: {
+          sceneType: 'exam_event',
+          playerName: '李秀妍',
+          stats,
+          actionName: examTitle,
+          examType,
+          examScore: score,
+          location: '首尔女子高中第1大考场',
+          timeContext: `高${gradeYear}第${weekInYear}周统考日`,
+        },
+      });
+
+      if (res.narrative) {
+        finalNarrative = res.narrative;
+        if (res.dialogue) {
+          finalNarrative += `\n\n💬【考场音效/对话】: ${res.dialogue}`;
+        }
+      }
+    } catch (_err) {
+      console.warn('AI 考试剧情生成降级：', _err);
+    } finally {
+      setIsLoadingExam(false);
+    }
+
+    if (onRecordExamDone) onRecordExamDone();
+
+    const resultDeltas: Partial<GameStats> = {
+      academics: Math.min(100, stats.academics + 3),
+      stamina: Math.max(0, stats.stamina - 15),
+      coins: stats.coins + scholarship,
+      family: Math.min(100, stats.family + familyDelta),
+      allowance: Math.max(10000, stats.allowance + allowanceDelta),
+    };
+
+    if (onTakeExam) {
+      onTakeExam(examType);
+    }
+
+    if (onShowResultModal) {
+      onShowResultModal({
+        title: `全真大考结算 · ${examTitle}`,
+        description: `${finalNarrative}\n\n📊【成绩单】: 考分 ${score}分 (内申第 ${gradeRank} 等级)\n💰【奖学金与零花钱】: 获得奖学金 ₩${scholarship.toLocaleString()}，每周零花钱调整为 ₩${(stats.allowance + allowanceDelta).toLocaleString()}`,
+        deltas: resultDeltas,
+        memoryLog: `参加了【${examTitle}】，考出 ${score}分（第${gradeRank}等级），斩获奖学金 ₩${scholarship.toLocaleString()}。`,
+      });
+    } else {
+      onUpdateStats(resultDeltas);
+      onNotify(
+        `完成【${examTitle}】！得分: ${score}分 (${gradeRank}等级)，奖学金 +₩${scholarship.toLocaleString()}！`
+      );
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs">
       <div className="bg-[#f5f2eb] border-2 border-[#dcd5c7] rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl text-[#2b2620]">
@@ -54,7 +179,7 @@ export const GradesModal: React.FC<GradesModalProps> = ({
                 韩国高中学制评价 · 内申成绩单与家庭关系
               </h2>
               <p className="text-[11px] text-[#e1ebf2]">
-                成绩直接影响升学评价、每周零花钱额度（当前 ₩{stats.allowance.toLocaleString()}/周）、家庭关系与最终结局
+                阶段性大考影响升学履历、零花钱额度（当前 ₩{stats.allowance.toLocaleString()}/周）与家庭关系
               </p>
             </div>
           </div>
@@ -106,44 +231,73 @@ export const GradesModal: React.FC<GradesModalProps> = ({
 
           {/* Interactive Exam & Family Actions */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Exam Box */}
             <div className="bg-[#eae4d8] border border-[#cfc7b8] rounded-xl p-3.5 flex flex-col justify-between">
               <div>
-                <div className="font-bold text-sm text-[#2b2620] flex items-center gap-1.5">
-                  <FileCheck2 className="w-4 h-4 text-[#3b5c7a]" />
-                  <span>参加全国联合学力评价 / CSAT模拟考</span>
+                <div className="font-bold text-sm text-[#2b2620] flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <FileCheck2 className="w-4 h-4 text-[#3b5c7a]" />
+                    <span>全国联合学力评价 / 阶段大考考场</span>
+                  </span>
+                  {isExamWeek && !isExamAlreadyTaken && (
+                    <span className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded-md font-bold animate-pulse">
+                      大考周就绪
+                    </span>
+                  )}
                 </div>
-                <p className="text-xs text-[#5e5548] mt-1 leading-relaxed">
-                  立即进行一次全真统考测验（消耗15体力）。若取得1~2等级优异成绩，将获得丰厚奖学金并上调每周零花钱！
+
+                <p className="text-xs text-[#5e5548] mt-1.5 leading-relaxed">
+                  {isExamWeek
+                    ? `当前为【${milestoneExam?.title}】！点击进行全真大考测评（消耗15体力），取得1~2等级可斩获高额奖学金与零花钱上调！`
+                    : '考试属于重大阶段性节点，日常不可反复刷考。请推进日程至期中/期末/模考等统考大考周（第6/12/15/21/24/29/34周）！'}
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  if (onTakeExam) {
-                    onTakeExam('mock');
-                  } else {
-                    const bonusCoin = stats.academics >= 80 ? 40000 : 15000;
-                    onUpdateStats({
-                      academics: Math.min(100, stats.academics + 4),
-                      stamina: Math.max(0, stats.stamina - 15),
-                      coins: stats.coins + bonusCoin,
-                      family: Math.min(100, stats.family + 5),
-                    });
-                    onNotify(`完成全国模考测验！学业+4，家庭关系+5，获得优胜奖学金 ₩${bonusCoin.toLocaleString()}！`);
-                  }
-                }}
-                className="mt-3 w-full py-2 bg-[#4b5c6b] hover:bg-[#3d4c59] text-white rounded-xl text-xs font-bold cursor-pointer"
-              >
-                立即参加模考测验 (-15体力)
-              </button>
+
+              <div className="mt-3">
+                <button
+                  onClick={handleExecuteExam}
+                  disabled={!isExamWeek || isExamAlreadyTaken || isLoadingExam}
+                  className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold cursor-pointer flex items-center justify-center gap-1.5 transition-all ${
+                    !isExamWeek
+                      ? 'bg-gray-300 border border-gray-400 text-gray-600 cursor-not-allowed opacity-80'
+                      : isExamAlreadyTaken
+                      ? 'bg-amber-200 border border-amber-300 text-amber-900 cursor-not-allowed'
+                      : 'bg-[#4b5c6b] hover:bg-[#3d4c59] text-white shadow-md'
+                  }`}
+                >
+                  {!isExamWeek ? (
+                    <span className="flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      <span>非统考大考周，日常不可反复刷考</span>
+                    </span>
+                  ) : isExamAlreadyTaken ? (
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-amber-800" />
+                      <span>本周大考已完成，请推进日程</span>
+                    </span>
+                  ) : isLoadingExam ? (
+                    <span className="flex items-center gap-1">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                      <span>AI 正在生成全真考场微描写...</span>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>参加【{milestoneExam?.title}】(-15体力)</span>
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
 
+            {/* Family Conversation Box */}
             <div className="bg-[#eae4d8] border border-[#cfc7b8] rounded-xl p-3.5 flex flex-col justify-between">
               <div>
                 <div className="font-bold text-sm text-[#2b2620] flex items-center gap-1.5">
                   <Home className="w-4 h-4 text-[#7a5c3b]" />
                   <span>家庭周末夜谈 & 申请上调零花钱</span>
                 </div>
-                <p className="text-xs text-[#5e5548] mt-1 leading-relaxed">
+                <p className="text-xs text-[#5e5548] mt-1.5 leading-relaxed">
                   与父母坦诚交流近期的校园生活与未来规划，修复家庭隔阂、降低备考压力，并根据学业表现提升零花钱额度。
                 </p>
               </div>
@@ -160,7 +314,7 @@ export const GradesModal: React.FC<GradesModalProps> = ({
                     `与父母进行了温暖的家庭长谈！家庭关系+10，压力降低，每周零花钱上调 +₩${allowanceBoost.toLocaleString()}！`
                   );
                 }}
-                className="mt-3 w-full py-2 bg-[#7a6248] hover:bg-[#66513a] text-white rounded-xl text-xs font-bold cursor-pointer"
+                className="mt-3 w-full py-2.5 bg-[#7a6248] hover:bg-[#66513a] text-white rounded-xl text-xs font-bold cursor-pointer"
               >
                 与父母温馨谈心 (+10家庭 & 上调零花钱)
               </button>
@@ -175,7 +329,7 @@ export const GradesModal: React.FC<GradesModalProps> = ({
             </div>
             {examRecords.length === 0 ? (
               <div className="text-xs text-[#7a7062] py-4 text-center">
-                随着周回合推进（第6周期中考、第12周6月模考、第15周期末考等）或点击上方按钮，你的所有大考成绩单将记录于此。
+                随着周回合推进（第6周期中考、第12周6月模考、第15周期末考等）在考场周参加测验，你的所有大考成绩单将记录于此。
               </div>
             ) : (
               <div className="space-y-2 max-h-48 overflow-y-auto">

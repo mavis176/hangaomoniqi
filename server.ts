@@ -5,6 +5,15 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  DYNAMIC_NPC_FALLBACK_PRESETS,
+  getAvatarForSeed,
+  getEncounterLocationByAction,
+} from './src/data/encounterData';
+import {
+  ANTI_AI_STYLE_RULES,
+  sanitizeAntiAIResponse,
+} from './src/services/aiService';
 
 dotenv.config();
 
@@ -63,6 +72,8 @@ async function callLiveOpenAICompatibleLLM(systemPrompt: string, userPrompt: str
             role: 'system',
             content:
               systemPrompt +
+              '\n' +
+              ANTI_AI_STYLE_RULES +
               '\n\n【重要格式要求】必须使用纯正自然的现代简体中文（可点缀极少量韩语感叹词如“呀”、“大发”、“欧尼/前辈”，但正文必须是简体中文），并且只输出合法的 JSON 对象，不要包含 markdown 代码块标记！',
           },
           { role: 'user', content: userPrompt },
@@ -78,13 +89,14 @@ async function callLiveOpenAICompatibleLLM(systemPrompt: string, userPrompt: str
       .replace(/<think>[\s\S]*?<\/think>/g, '')
       .replace(/```json/gi, '')
       .replace(/```/g, '')
+      .replace(/\s*(?:——+|—+|--+)\s*/g, '，')
       .trim();
     const firstBrace = cleaned.indexOf('{');
     const lastBrace = cleaned.lastIndexOf('}');
     if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+      return sanitizeAntiAIResponse(JSON.parse(cleaned.slice(firstBrace, lastBrace + 1)));
     }
-    return JSON.parse(cleaned);
+    return sanitizeAntiAIResponse(JSON.parse(cleaned));
   } catch (_e) {
     clearTimeout(timer);
     return null;
@@ -433,6 +445,26 @@ function buildContextualChatFallback(params: {
     ]);
   }
 
+  if (npc?.isGenerated) {
+    const role = npc?.role || '朋友';
+    const cName = npc?.chineseName || '新朋友';
+    const style = npc?.speakingStyle || '亲切真诚';
+    return {
+      reply: `秀妍！听到你跟我聊“${msg.slice(0, 18)}”，感觉我们之间越来越熟络了呢。在${location}这边，平时的气氛总是很特别，很高兴能跟你分享这些！`,
+      actionDesc: `${cName}停下手中的动作，转过头来注视着你，眼神里满是属于【${role}】的独特神采`,
+      innerThought: `上次在街头偶遇相识后，每次跟秀妍聊天都觉得格外合拍。`,
+      newMemory: `和${cName}在${location}聊了关于“${msg.slice(0, 18)}”的话题，友谊更加深厚了`,
+      favorabilityDelta: 6,
+      moodDelta: 6,
+      socialDelta: 4,
+      suggestedReplies: [
+        `哈哈，你刚才说话的神态真的太有【${role}】的气质了！`,
+        `下次如果有空的话，我们再去上次那家店坐坐吧！`,
+        `能认识你真的太好了，感觉首尔的生活越来越精彩了。`,
+      ],
+    };
+  }
+
   // Default npc_1 朴敏英
   return pick([
     {
@@ -477,7 +509,7 @@ function buildContextualEventFallback(params: {
     const cleanPrompt = customPrompt.trim();
     return {
       title: `校园特别插曲 · ${cleanPrompt.slice(0, 12)}`,
-      content: `${timeContext}，在${location}柔和的光线里，正如你所期待的那样——“${cleanPrompt}”悄然发生了。周围同学们的目光若有若无地投来，空气中带着一丝独属于首尔高中的微妙心跳感。`,
+      content: `${timeContext}，在${location}柔和的光线里，正如你所期待的那样，“${cleanPrompt}”悄然发生了。周围同学们的目光若有若无地投来，空气中带着一丝独属于首尔高中的微妙心跳感。`,
       options: [
         {
           text: '大方自然地走上前去互动回应',
@@ -487,7 +519,7 @@ function buildContextualEventFallback(params: {
         },
         {
           text: '带着一丝矜持与俏皮，用眼神传递默契',
-          resultText: '虽然没有过多言语，但彼此心照不宣的默契让气氛格外融洽。',
+          resultText: '彼此心照不宣的默契让气氛格外融洽。',
           memoryLog: `在${location}留下了难忘的默契瞬间：${cleanPrompt}`,
           effect: { mood: 8, stamina: -3, academics: 4, social: 4, appearance: 3, coins: 0, npcId: 'npc_4', favDelta: 7 },
         },
@@ -522,7 +554,7 @@ function buildContextualEventFallback(params: {
     },
     {
       title: '自动贩卖机多掉下来的一罐桃子汁',
-      content: `你在${location}拐角的自动贩卖机投币买饮料时，“哐当、哐当”两声——出口竟然同时掉下了两罐冰镇水蜜桃气泡水！而身后的韩素拉正好拿着硬币走过来准备买咖啡。`,
+      content: `你在${location}拐角的自动贩卖机投币买饮料时，听见“哐当、哐当”两声，出口竟然同时掉下了两罐冰镇水蜜桃气泡水！而身后的韩素拉正好拿着硬币走过来准备买咖啡。`,
       options: [
         {
           text: '顺手把多出来的那罐桃子汁递给韩素拉',
@@ -566,16 +598,40 @@ async function startServer() {
       narrativeStyle,
     } = req.body;
 
-    const persona = CHARACTER_PERSONAS[npc?.id] || npc?.description || '';
+    const persona =
+      CHARACTER_PERSONAS[npc?.id] ||
+      (npc?.isGenerated
+        ? `【${npc?.chineseName || '新朋友'} (${npc?.koreanName || ''}) · ${npc?.role || '动态结识的伙伴'}】
+- 真实性格核心：${npc?.personality || npc?.description || '个性独特鲜活，富有反差魅力'}
+- 初识背景与情境：${npc?.initialImpression || '在首尔街头偶遇相识'}（结识于高${npc?.encounterWeek ? `第${npc.encounterWeek}周` : ''}，地点：${npc?.encounterLocation || ''}）
+- 独特口癖与称呼习惯：${npc?.speakingStyle || '自然鲜活的年轻人口语'}
+- 人设约束：严格沿用上述口癖与性格核心，与李秀妍进行自然亲切的聊天！`
+        : npc?.description || '');
     const mbti = npc?.mbti || '真实鲜活的韩国女高中生';
     const interests =
       Array.isArray(npc?.interests) && npc.interests.length > 0
         ? npc.interests.join('、')
         : '校园日常与首尔潮流生活';
-    const speechStyle = npc?.speechStyle || '青春口语、有生活细节与情绪波动';
     const currentFav = typeof npc?.favorability === 'number' ? npc.favorability : 60;
     const currentRomance = typeof npc?.romancePoints === 'number' ? npc.romancePoints : 0;
     const stage = npc?.relationshipStage || '朋友';
+    const nickname = npc?.nicknameToPlayer || '秀妍';
+    const speakingStyle = npc?.speakingStyle || '青春口语、有生活细节与情绪波动';
+    const forbiddenList = Array.isArray(npc?.forbiddenWords) && npc.forbiddenWords.length > 0
+      ? npc.forbiddenWords.join('、')
+      : '请问有什么可以帮您、作为人工智能、好的呢、尊敬的用户';
+
+    let attitudeDesc = '平淡而客气地保持社交距离';
+    if (npc?.attitudeByAffection) {
+      if (currentFav < 30) attitudeDesc = npc.attitudeByAffection.low || attitudeDesc;
+      else if (currentFav < 70) attitudeDesc = npc.attitudeByAffection.mid || attitudeDesc;
+      else attitudeDesc = npc.attitudeByAffection.high || attitudeDesc;
+    } else {
+      if (currentFav >= 70) attitudeDesc = '十分依赖与偏爱，展现内心真实脆弱与占有欲';
+      else if (currentFav >= 30) attitudeDesc = '损友互怼，亲切自然，随性吐露心事';
+      else attitudeDesc = '稍微害羞拘谨，保持客气界限';
+    }
+
     const memoryKeywordsList =
       Array.isArray(npc?.memoryKeywords) && npc.memoryKeywords.length > 0
         ? npc.memoryKeywords.join('、')
@@ -600,20 +656,13 @@ async function startServer() {
     const systemPrompt = `你正在进行一场极具现实生活质感、百分之百【绝对真人化】的《韩国女高模拟器》沉浸式对话。
 你不是AI，你就是首尔女子高中1-1班活生生的高中女生【${npc?.chineseName}】（${npc?.koreanName}，身份：${npc?.role}）。
 
-【绝对铁律（违者视为严重失格）】
-1. 绝对禁止任何AI客服腔、助理口吻或生硬说教（例如：“作为人工智能/虚拟角色”、“很高兴为您解答”、“有什么我可以帮您的吗”、“让我们共同努力”等）。
-2. 必须拥有真实人类的呼吸感、情绪起伏、小脾气、傲娇、羞涩、坏笑或温柔。说话要像现实中坐在你旁边的同桌、学姐或青梅竹马，用词口语化、接地气、带有韩国女高生特有的日常感（偶尔带一点“呀”、“真的吗？”、“大发”、“呀，你别笑我”等语气词）。
-3. 【绝对禁止复读机】绝对不要机械地重复或复述李秀妍刚才说过的话！就像真实人类聊天一样，听到对方的话后，直接顺着话题发表你的真实看法、情绪反应、吐槽、反问或者开启新话题。
-
-【当前人设与状态】
-- MBTI 人格：${mbti}
-- 兴趣与日常：${interests}
-- 口吻风格：${speechStyle}
-- 当前对李秀妍的好感度：${currentFav}/100，心动值：${currentRomance}，当前关系阶段：【${stage}】
-  * 若是【恋人/暧昧】：要自然流露偏爱、吃醋、心跳加速和小心思；
-  * 若是【挚友/朋友】：要亲密随性、抢零食、吐槽考试、分享秘密；
-  * 若是【相识】：保持真实青春期的试探或客气。
-- 共同记忆标签：${memoryKeywordsList}
+【绝对人设与发言规则（违者严重失格）】
+1. 称呼习惯：对李秀妍习惯称呼为【${nickname}】。
+2. 句式与口癖：${speakingStyle}。
+3. 严格禁止使用任何客服套话，严禁出现这些禁用词：[ ${forbiddenList} ]。
+4. 当前好感度 (${currentFav}/100) 下的态度表现：【${attitudeDesc}】。
+5. 限制：单次输出【限制在 1-3 句自然口语】！必须带出神态或微动作，严禁分点列举，严禁客服腔说明文！
+6. 【绝对禁止复读】不要复述李秀妍的话，直接发表你的看法、情绪反应、吐槽或调侃。
 
 【角色个性背景】
 ${persona}
@@ -621,9 +670,10 @@ ${persona}
 【当前情境】
 - 时间：${timeContext || '课间休息'}
 - 地点：${location || '2楼走廊'}
-- 叙事基调：${narrativeStyle || '真实细腻、充满青春呼吸感的韩国女高日常'}
+- 关系阶段：【${stage}】（好感 ${currentFav}，心动 ${currentRomance}）
 - 过往共同记忆：
-${memoryList}`;
+${memoryList}
+${ANTI_AI_STYLE_RULES}`;
 
     const userPrompt = `【刚才的对话上下文】
 ${historyText}
@@ -647,7 +697,8 @@ ${historyText}
     "随性调侃回复2",
     "甜蜜互动回复3"
   ]
-}`;
+}
+${ANTI_AI_STYLE_RULES}`;
 
     try {
       const client = getGenAIClient();
@@ -692,7 +743,7 @@ ${historyText}
           },
         });
         const text = response.text || '{}';
-        res.json(JSON.parse(text));
+        res.json(sanitizeAntiAIResponse(JSON.parse(text)));
         return;
       }
     } catch (_error: any) {
@@ -752,7 +803,204 @@ ${historyText}
   });
 
   // 1.5 KakaoTalk Live Class/Idol Group Chat AI Endpoint
-  app.post('/api/ai/group-chat', async (req, res) => {
+    // 1.2 Global Dynamic Narrative Generator (Choice Outcomes, Part-time Jobs, Mentor Feedback)
+  app.post('/api/ai/narrative', async (req, res) => {
+    const {
+      sceneType = 'general',
+      playerName = '李秀妍',
+      stats,
+      actionName = '',
+      choiceText = '',
+      npc,
+      agencyName = 'K-POP企划社',
+      location = '校园',
+      timeContext = '平常的一天',
+      customPrompt = '',
+    } = req.body;
+
+    let systemPrompt = '';
+    let userPrompt = '';
+
+    if (sceneType === 'choice_option') {
+      systemPrompt = `你正在扮演《韩国女高模拟器》的写实派剧情编剧。
+玩家【${playerName}】在【${location}】面临了一个抉择并做出了选择：“${choiceText}”。
+请生成一段富有画面感、心理活动与现场代入感的情境后续微描写（50-80字），并给出主角后续的短台词或周边反响。
+绝对禁止客观说明文和AI腔，必须用有质感、有呼吸感的青春剧叙事笔触。`;
+      userPrompt = `抉择动作：“${choiceText}”，地点：${location}。${npc ? `涉及NPC：${npc.chineseName}(好感${npc.favorability})` : ''}。${customPrompt}`;
+    } else if (sceneType === 'job_event') {
+      systemPrompt = `你是《韩国女高模拟器》的兼职与打工奇遇编剧。
+玩家【${playerName}】正在进行兼职活动【${actionName || '便利店兼职'}】（地点：${location}）。
+请随机生成一段 50-80 字生动有趣的兼职打工现场突发事件（如在便利店被大叔认出是练习生、在咖啡馆打翻了当红爱豆的冰美式、被买便利店拉面的人要签名等）。
+必须返回JSON：
+{
+  "title": "打工突发小插曲",
+  "narrative": "50-80字兼职打工现场微描写",
+  "dialogue": "现场代入台词或对话",
+  "jobEvent": {
+    "title": "打工奇遇",
+    "encounterDesc": "具体的突发细节描写",
+    "tipGained": 8000
+  }
+}`;
+      userPrompt = `兼职项目：${actionName}，地点：${location}，时间：${timeContext}。${customPrompt}`;
+    } else if (sceneType === 'endorsement_event') {
+      systemPrompt = `你是《韩国女高模拟器》的商业代言与高奢拍摄现场编剧。
+玩家【${playerName}】正在拍摄商业代言【${actionName || '高奢品牌代言拍摄'}】（地点：${location || '江南摄影棚'}）。
+请生成一段 50-80 字的广告拍摄现场突发状况（如摄影师对眼神与表情极度挑剔要求重拍20次、片场偶遇竞争公司对手练习生暗中冷嘲热讽、或品牌高层被主角镜头表现力惊艳直呼选对人）。
+必须返回JSON：
+{
+  "title": "代言拍摄现场纪实",
+  "narrative": "50-80字广告拍摄现场突发微描写",
+  "dialogue": "摄影师或品牌方/对手的现场台词",
+  "jobEvent": {
+    "title": "片场突发状况",
+    "encounterDesc": "拍摄过程中的波折或闪光时刻",
+    "tipGained": 15000
+  }
+}`;
+      userPrompt = `代言广告：${actionName}，地点：${location}，主角形象：${stats?.appearance}。${customPrompt}`;
+    } else if (sceneType === 'exam_event') {
+      systemPrompt = `你是《韩国女高模拟器》的考场与大考结算微描写编剧。
+玩家【${playerName}】刚刚完成了考场测试【${actionName || '全国联合模考'}】（考分：${req.body.examScore || 88}分）。
+请结合考分生成一段 50-80 字现场感极强的考场微描写（如同桌试图偷瞄答题卡被监考老师瞪了回去、做完压轴数学大题交卷时全班倒吸一口凉气、答题卡涂卡笔沙沙作响等）。
+必须返回JSON：
+{
+  "title": "考场全真微描写",
+  "narrative": "50-80字考场现场气氛与考生反应微描写",
+  "dialogue": "考场广播声音或同桌小声惊呼"
+}`;
+      userPrompt = `考试科目与名称：${actionName}，考分：${req.body.examScore}分，学业水平：${stats?.academics}。${customPrompt}`;
+    } else if (sceneType === 'trainee_eval') {
+      systemPrompt = `你是韩国顶级K-POP娱乐公司【${agencyName}】的资深总监兼严厉导师（例如HYBE/SM/YG/JYP风格）。
+练习生【${playerName}】正在接受月度综合考核（Vocal: ${stats?.vocalSkill || 40}, Dance: ${stats?.danceSkill || 40}, Stage: ${stats?.cameraSkill || 40}, 形象: ${stats?.appearance || 50}）。
+请以极其专业、针针见血、严格却充满期望的K-POP导师视角给出考核点评。
+必须返回JSON：
+{
+  "narrative": "60-90字考核现场氛围与评委席上的严肃氛围描写",
+  "mentorVerdict": {
+    "mentorName": "代表总导师",
+    "agencyStyle": "${agencyName} 导师标准",
+    "ratingScore": 85,
+    "critique": "2-3句犀利直击痛点的点评（如针对呼吸节拍、眼神抓镜头、舞蹈发力点）",
+    "advice": "1句具体的训练建议"
+  }
+}`;
+      userPrompt = `练习生：${playerName}，企划社：${agencyName}，属性：Vocal ${stats?.vocalSkill} Dance ${stats?.danceSkill} Camera ${stats?.cameraSkill}。${customPrompt}`;
+    } else {
+      systemPrompt = `你是《韩国女高模拟器》的校园微叙事引擎。请生成一段50-80字有氛围感、现场感的短剧情。`;
+      userPrompt = `玩家：${playerName}，行动：${actionName}，地点：${location}。${customPrompt}`;
+    }
+
+    systemPrompt = `${systemPrompt}\n${ANTI_AI_STYLE_RULES}`;
+
+    try {
+      const client = getGenAIClient();
+      if (client) {
+        const response = await client.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: `${systemPrompt}\n\n${userPrompt}`,
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING },
+                narrative: { type: Type.STRING },
+                dialogue: { type: Type.STRING },
+                mentorVerdict: {
+                  type: Type.OBJECT,
+                  properties: {
+                    mentorName: { type: Type.STRING },
+                    agencyStyle: { type: Type.STRING },
+                    ratingScore: { type: Type.NUMBER },
+                    critique: { type: Type.STRING },
+                    advice: { type: Type.STRING },
+                  },
+                },
+                jobEvent: {
+                  type: Type.OBJECT,
+                  properties: {
+                    title: { type: Type.STRING },
+                    encounterDesc: { type: Type.STRING },
+                    tipGained: { type: Type.NUMBER },
+                  },
+                },
+                choiceFollowUp: {
+                  type: Type.OBJECT,
+                  properties: {
+                    innerFeeling: { type: Type.STRING },
+                    socialImpact: { type: Type.STRING },
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        if (response.text) {
+          const parsed = sanitizeAntiAIResponse(JSON.parse(response.text.trim()));
+          return res.json(parsed);
+        }
+      }
+
+      // Live Pollinations fallback
+      const fallbackData = await callLiveOpenAICompatibleLLM(systemPrompt, userPrompt);
+      if (fallbackData) {
+        return res.json(sanitizeAntiAIResponse(fallbackData));
+      }
+    } catch (err) {
+      handleGenAIError(err);
+    }
+
+    // Default Fallback
+    if (sceneType === 'job_event') {
+      res.json({
+        title: `${actionName} 兼职体验`,
+        narrative: `在【${location}】打工期间，隔壁桌的客人认出你像是练习生并投来好奇目光。你礼貌回应并利落地整理好餐盘，得到了店长发自肺腑的夸奖。`,
+        dialogue: `“小姑娘长得真漂亮，是哪家公司准备要出道的练习生吧？”`,
+        jobEvent: {
+          title: `收银小插曲`,
+          encounterDesc: `在工作期间细心处理好了突发事务，获得了额外的顾客赞赏与小费奖励。`,
+          tipGained: 6000,
+        },
+      });
+    } else if (sceneType === 'endorsement_event') {
+      res.json({
+        title: `${actionName} 拍摄现场`,
+        narrative: `江南摄影棚内强光闪烁，严厉的摄影师要求你在3秒内切换冷艳与甜美表情。重拍了15组后，品牌高层看着直出大片拍案叫绝！`,
+        dialogue: `“对！就是这个眼神！这就是我们高奢品牌一直在寻找的少女高级感！”`,
+        jobEvent: {
+          title: `片场惊艳瞬间`,
+          encounterDesc: `片场虽有同行竞争对手暗中挑刺，但你的顶级镜头表现力碾压全场，获得了品牌方追加奖金！`,
+          tipGained: 15000,
+        },
+      });
+    } else if (sceneType === 'exam_event') {
+      res.json({
+        title: `${actionName} 考场纪实`,
+        narrative: `考场钟声戛然而止，答题卡涂卡笔的声音归于平静。同桌试图偷瞄你的最后压轴大题，被监考老师严厉地咳了一声瞪回去，你气定神神地下上交了试卷。`,
+        dialogue: `“最后那道数学压轴几何题太难了……全班好像只有秀妍全做出来了！”`,
+      });
+    } else if (sceneType === 'trainee_eval') {
+      res.json({
+        narrative: `在【${agencyName}】主练习室闪烁的聚光灯下，导师们低头查看着你的各项评分数据，现场气氛紧张凝重。`,
+        mentorVerdict: {
+          mentorName: '首席考核导师',
+          agencyStyle: `${agencyName} 标准`,
+          ratingScore: Math.min(98, Math.round(((stats?.vocalSkill || 40) + (stats?.danceSkill || 40)) / 2 + 10)),
+          critique: '整体表现有进步，发音与节拍控制比上周更加稳定，但舞台感染力和镜头抓取还需要更加自信！',
+          advice: '下周重点加强舞蹈定点与大歌发力训练，保持这个冲劲！',
+        },
+      });
+    } else {
+      res.json({
+        narrative: `在【${location}】，伴随着你的决定，周围的气氛泛起了一阵涟漪，一切都在朝向意料之外又情理之中的方向悄然展开……`,
+        dialogue: `“既然做做出选择，那就坚定地走下去吧！”`,
+      });
+    }
+  });
+
+app.post('/api/ai/group-chat', async (req, res) => {
     const { userMessage, groupType = 'class', npcs = [], timeContext = '放学后' } = req.body;
 
     const systemPrompt = `你是《韩国女高模拟器》中 KakaoTalk 群聊的实时AI模拟器。
@@ -886,7 +1134,7 @@ ${historyText}
         ? recentMemories.slice(-8).join('；')
         : '新学期刚开始的日常';
 
-    const systemPrompt = `你是《韩国女高模拟器》的写实派校园编剧。请写一段贴近现实韩国高中生活的突发小插曲。`;
+    const systemPrompt = `你是《韩国女高模拟器》的写实派校园编剧。请写一段贴近现实韩国高中生活的突发小插曲。\n${ANTI_AI_STYLE_RULES}`;
     const userPrompt = `主角李秀妍当前的真实时间：${timeContext}，地点：${location}，近期记忆：${memText}，认识的同学：${npcSummary}，文风：${narrativeStyle}。${customPrompt ? `玩家期望剧情：“${customPrompt}”。` : ''}
 必须严格返回如下 JSON 格式：
 {
@@ -923,7 +1171,7 @@ ${historyText}
           config: { responseMimeType: 'application/json' },
         });
         const text = response.text || '{}';
-        res.json(JSON.parse(text));
+        res.json(sanitizeAntiAIResponse(JSON.parse(text)));
         return;
       }
     } catch (_error: any) {
@@ -1305,6 +1553,204 @@ ${contextInfo}
       res.json({ success: true, ...(fallbackMap[pathType] || fallbackMap.idol) });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || '生成人生剧情失败' });
+    }
+  });
+
+  // 11. AI Dynamic NPC Encounter Generator Endpoint (Gemini -> OpenAI LLM -> 5 Curated Local Fallbacks)
+  app.post('/api/ai/generate-encounter', async (req, res) => {
+    try {
+      const { playerContext } = req.body || {};
+      const {
+        actionId = 'act_study_class',
+        actionName = '校园日程',
+        actionCategory = '校园生活',
+        dayName = '今天',
+        weekInYear = 1,
+        gradeYear = 1,
+        location = '',
+      } = playerContext || {};
+
+      const loc = getEncounterLocationByAction(actionId, location);
+
+      const systemPrompt = `你正在为网页模拟游戏《韩国女高模拟器》担任游戏导演与角色设定主笔。
+玩家李秀妍当前正处于高${gradeYear}第${weekInYear}周（${dayName}），正在进行日程：【${actionName}】（类别：${actionCategory}，发生地点：${loc}）。
+
+请现场即兴生成一个富有韩国真实当代校园或都市流行娱乐特色的【全新偶遇人物 (Dynamic NPC Encounter)】！
+人物必须鲜活、接地气、具有韩漫人物的反差萌与记忆点（例如：隔壁校乐队吉他手/竞争公司C班练习生/便利店打工前辈/圣水洞买手店咖啡师/大峙洞并肩刷题的学姐/街舞工作室踢馆舞者）。
+
+必须严格以合法 JSON 对象格式返回，绝不包含任何 markdown 代码块标记，不要额外说明文字：
+{
+  "name": "随机韩文名（带中文译名，例如：崔宥真 (최유진)）",
+  "chineseName": "中文译名（如：崔宥真）",
+  "koreanName": "纯韩文名（如：최유진）",
+  "identity": "身份设定（如：隔壁校乐队吉他手 / 竞争娱乐社C班练习生 / 便利店打工前辈）",
+  "personality": "性格核心（如：表面冷淡其实是重度猫奴 / 元气但容易自卑 / 慵懒知性的胶片控）",
+  "speakingStyle": "独特的口癖与称呼习惯（如：习惯短句反问，偶尔带一句傲娇的“呀……”）",
+  "avatarSeed": "头像种子（从以下分类中选最贴合的：female_guitarist | male_trainee | female_cafe_senior | male_skater | female_study_cram | female_dance_rival | male_film_director | female_art_prep）",
+  "encounterStory": "相遇时的微情境短文（50-80字，如借伞、抢最后一盒草莓牛奶、练习室撞衫、耳机线缠绕等富有生活画面的瞬间）",
+  "encounterLocation": "${loc}",
+  "choices": [
+    { "text": "主动交换 KakaoTalk 认识一下", "action": "ADD_FRIEND" },
+    { "text": "微笑点头，擦肩而过", "action": "IGNORE" }
+  ]
+}
+${ANTI_AI_STYLE_RULES}`;
+
+      const userPrompt = `请在【${loc}】围绕玩家刚刚进行的【${actionName}】日程，即兴生成一位全新的偶遇 NPC，严格返回纯 JSON。`;
+
+      // 1. Try Gemini Client (gemini-3.8-flash)
+      const ai = getGenAIClient();
+      if (ai) {
+        try {
+          const response = await ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: userPrompt,
+            config: {
+              systemInstruction: systemPrompt,
+              responseMimeType: 'application/json',
+              temperature: 0.9,
+            },
+          });
+          const text = response.text?.trim() || '';
+          const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+          const parsed = sanitizeAntiAIResponse(JSON.parse(cleaned));
+          if (parsed.name && parsed.identity && parsed.encounterStory) {
+            if (!parsed.avatarUrl) {
+              parsed.avatarUrl = getAvatarForSeed(parsed.avatarSeed);
+            }
+            if (!parsed.encounterLocation) {
+              parsed.encounterLocation = loc;
+            }
+            return res.json(parsed);
+          }
+        } catch (err) {
+          handleGenAIError(err);
+        }
+      }
+
+      // 2. Try Live OpenAI Compatible fallback
+      try {
+        const liveData = await callLiveOpenAICompatibleLLM(systemPrompt, userPrompt);
+        if (liveData && liveData.name && liveData.identity && liveData.encounterStory) {
+          if (!liveData.avatarUrl) {
+            liveData.avatarUrl = getAvatarForSeed(liveData.avatarSeed);
+          }
+          if (!liveData.encounterLocation) {
+            liveData.encounterLocation = loc;
+          }
+          return res.json(sanitizeAntiAIResponse(liveData));
+        }
+      } catch (_e) {}
+
+      // 3. Fallback to 5 curated local presets
+      const randIdx = Math.floor(Math.random() * DYNAMIC_NPC_FALLBACK_PRESETS.length);
+      const preset = DYNAMIC_NPC_FALLBACK_PRESETS[randIdx];
+      const fallbackData = sanitizeAntiAIResponse({
+        ...preset,
+        encounterLocation: loc || preset.encounterLocation,
+      });
+      return res.json(fallbackData);
+    } catch (err: any) {
+      // Guaranteed safety: return local preset 0
+      const safeFallback = sanitizeAntiAIResponse(DYNAMIC_NPC_FALLBACK_PRESETS[0]);
+      return res.json(safeFallback);
+    }
+  });
+
+  // 12. AI Briefing (/summary) Endpoint based on NPC memories field
+  app.post('/api/ai/npc-summary', async (req, res) => {
+    try {
+      const { npc, memories, timeContext } = req.body || {};
+      const cName = npc?.chineseName || '伙伴';
+      const role = npc?.role || '同学';
+      const stage = npc?.relationshipStage || '朋友';
+      const fav = npc?.favorability ?? 50;
+      const memList: string[] =
+        Array.isArray(memories) && memories.length > 0
+          ? memories
+          : Array.isArray(npc?.memories)
+          ? npc.memories
+          : [];
+      const memText =
+        memList.length > 0
+          ? memList.map((m, idx) => `${idx + 1}. ${m}`).join('\n')
+          : `初识于${npc?.encounterLocation || '首尔女子高中'}，身份为${role}，性格：${npc?.personality || npc?.description || '温柔鲜活'}`;
+
+      const systemPrompt = `你是《韩国女高模拟器》中的【简报 AI（Briefing AI）】。
+请严格基于当前 NPC【${cName}】（身份：${role}，当前关系阶段：${stage}，好感度：${fav}/100，性格：${npc?.personality || npc?.description || ''}）的 \`memories\` 字段记录，生成一份关于该 NPC 对玩家（李秀妍）的真实看法以及两人过去共同经历的 100 字左右总结。
+要求：
+1. 字数控制在 85~115 字左右（约 100 字），文风细腻且富有青春纪实感。
+2. 既要概括两人过去共同经历的关键记忆，也要点出该 NPC 目前对李秀妍的内心真实看法与羁绊温度。
+3. 必须严格返回纯 JSON 对象：
+{
+  "impressionTitle": "四到十字的印象标题（如：并肩追光的温暖同桌）",
+  "summary": "约100字的共同经历回顾与NPC对玩家看法总结",
+  "bondEvaluation": "一句话关系评语"
+}
+${ANTI_AI_STYLE_RULES}`;
+
+      const userPrompt = `当前时间：${timeContext || '首尔女高学期中'}
+NPC【${cName}】的 memories 共同记忆列表：
+${memText}
+请生成 100 字左右的【简报 AI】总结，严格返回纯 JSON。`;
+
+      // 1. Try Gemini
+      const ai = getGenAIClient();
+      if (ai) {
+        try {
+          const response = await ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: userPrompt,
+            config: {
+              systemInstruction: systemPrompt,
+              responseMimeType: 'application/json',
+              temperature: 0.75,
+            },
+          });
+          const text = response.text?.trim() || '';
+          const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+          const parsed = sanitizeAntiAIResponse(JSON.parse(cleaned));
+          if (parsed && parsed.summary) {
+            return res.json(parsed);
+          }
+        } catch (err) {
+          handleGenAIError(err);
+        }
+      }
+
+      // 2. Try Live OpenAI Compatible LLM
+      try {
+        const liveData = await callLiveOpenAICompatibleLLM(systemPrompt, userPrompt);
+        if (liveData && liveData.summary) {
+          return res.json(sanitizeAntiAIResponse(liveData));
+        }
+      } catch (_e) {}
+
+      // 3. Deterministic 100-word synthesis fallback based on memories
+      const recentMems = memList
+        .slice(-3)
+        .map((m) => m.replace(/^\[[^\]]+\]\s*/, ''))
+        .join('；');
+      const attitude =
+        fav >= 75
+          ? '早已将秀妍视为心底最耀眼、最无可替代的特别之人，每次并肩都满怀偏爱与默契'
+          : fav >= 50
+          ? '对秀妍充满欣赏与信赖，觉得有她在身边的时光总是格外安心明朗'
+          : '对秀妍抱有温暖的好感与好奇，期待在接下来的青春岁月里写下更多故事';
+
+      return res.json({
+        impressionTitle: `${cName}的羁绊简报 · ${stage}`,
+        summary: `翻开与【${role}】${cName}的共同回忆：${
+          recentMems || `从初识相遇的那一刻起，两人便在首尔校园开启了独特的缘分`
+        }。随着好感度升至 ${fav}%，在${cName}眼中，${attitude}。`,
+        bondEvaluation: `共收录 ${memList.length} 条专属记忆 · 关系阶段【${stage}】`,
+      });
+    } catch (_err) {
+      return res.json({
+        impressionTitle: '青春羁绊简报',
+        summary: '两人从初次相识一路走来，在校园与首尔街头留下了许多温暖的共同回忆，彼此间的默契与信任正在悄然升温。',
+        bondEvaluation: '羁绊持续升温中',
+      });
     }
   });
 

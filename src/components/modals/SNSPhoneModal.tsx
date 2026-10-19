@@ -26,6 +26,9 @@ interface SNSPhoneModalProps {
   npcs: NPCClassmate[];
   snsPosts: SNSPost[];
   weekLabel: string;
+  lastJobTurnKey?: string;
+  currentTurnKey?: string;
+  onRecordJobDone?: () => void;
   onPublishPost: (post: SNSPost, statsDelta: Partial<GameStats>) => void;
   onOpenNpcChat: (npc: NPCClassmate) => void;
   onOpenForum: () => void;
@@ -33,6 +36,8 @@ interface SNSPhoneModalProps {
   protagonistAvatar?: string;
   onChangeProtagonistAvatar?: (url: string) => void;
   onUpdateFavorability?: (npcId: string, amount: number, romanceDelta?: number) => void;
+  initialTab?: 'desktop' | 'stargram' | 'kakao' | 'bubble' | 'delivery' | 'alba' | 'aistudio' | 'music' | 'blind';
+  onTriggerRandomEncounter?: () => void;
 }
 
 export const SNSPhoneModal: React.FC<SNSPhoneModalProps> = ({
@@ -41,6 +46,9 @@ export const SNSPhoneModal: React.FC<SNSPhoneModalProps> = ({
   npcs,
   snsPosts,
   weekLabel,
+  lastJobTurnKey,
+  currentTurnKey,
+  onRecordJobDone,
   onPublishPost,
   onOpenNpcChat,
   onOpenForum,
@@ -48,10 +56,15 @@ export const SNSPhoneModal: React.FC<SNSPhoneModalProps> = ({
   protagonistAvatar,
   onChangeProtagonistAvatar,
   onUpdateFavorability,
+  initialTab = 'desktop',
+  onTriggerRandomEncounter,
 }) => {
+  const isAlreadyWorkedToday =
+    Boolean(lastJobTurnKey) && Boolean(currentTurnKey) && lastJobTurnKey === currentTurnKey;
   const [activeTab, setActiveTab] = useState<
     'desktop' | 'stargram' | 'kakao' | 'bubble' | 'delivery' | 'alba' | 'aistudio' | 'music' | 'blind'
-  >('desktop');
+  >(initialTab);
+  const [contactFilter, setContactFilter] = useState<'all' | 'dynamic'>('all');
 
   // Music Player state
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
@@ -791,7 +804,54 @@ export const SNSPhoneModal: React.FC<SNSPhoneModalProps> = ({
 
               {kakaoMode === 'contacts' ? (
                 <div className="space-y-2">
-                  {npcs.map((npc) => (
+                  {/* Contact Sub-Filter & AI Encounter Trigger */}
+                  <div className="flex flex-wrap items-center justify-between gap-1.5 bg-[#f7f4ee] border border-[#e0d9cc] rounded-xl p-1.5">
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setContactFilter('all')}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer ${
+                          contactFilter === 'all'
+                            ? 'bg-[#3b1e1e] text-[#fae100]'
+                            : 'text-[#5a5246] hover:bg-[#eae4d8]'
+                        }`}
+                      >
+                        全部好友 ({npcs.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setContactFilter('dynamic')}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer ${
+                          contactFilter === 'dynamic'
+                            ? 'bg-amber-600 text-white'
+                            : 'text-amber-900 bg-amber-100/70 hover:bg-amber-200/80'
+                        }`}
+                      >
+                        ✨ 偶遇新结识 ({npcs.filter((n) => n.isGenerated).length})
+                      </button>
+                    </div>
+                    {onTriggerRandomEncounter && (
+                      <button
+                        type="button"
+                        onClick={onTriggerRandomEncounter}
+                        className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-white text-[11px] font-black flex items-center gap-1 shadow-2xs cursor-pointer"
+                      >
+                        <Sparkles className="w-3 h-3 text-amber-100" />
+                        <span>街头偶遇新朋友</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {(contactFilter === 'dynamic' ? npcs.filter((n) => n.isGenerated) : npcs).length === 0 && (
+                    <div className="bg-white border border-dashed border-amber-300 rounded-2xl p-5 text-center space-y-2">
+                      <div className="text-xs font-bold text-amber-900">还没有通过街头偶遇结识的新朋友</div>
+                      <div className="text-[11px] text-[#6e6456]">
+                        每周推进日程时有概率触发偶遇，也可点击右上角【街头偶遇新朋友】立即邂逅！
+                      </div>
+                    </div>
+                  )}
+
+                  {(contactFilter === 'dynamic' ? npcs.filter((n) => n.isGenerated) : npcs).map((npc) => (
                     <div
                       key={npc.id}
                       onClick={() => {
@@ -808,7 +868,7 @@ export const SNSPhoneModal: React.FC<SNSPhoneModalProps> = ({
                           referrerPolicy="no-referrer"
                         />
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
                             <span className="font-bold text-xs sm:text-sm text-[#2b2620]">{npc.chineseName}</span>
                             <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#ede8df] text-[#5a5246] font-bold">
                               {npc.role}
@@ -816,10 +876,19 @@ export const SNSPhoneModal: React.FC<SNSPhoneModalProps> = ({
                             <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 font-bold">
                               {npc.relationshipStage}
                             </span>
+                            {npc.isGenerated && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300 font-bold">
+                                ✨ 新结识
+                              </span>
+                            )}
                           </div>
-                          <div className="text-[11px] text-[#6e6456] truncate mt-0.5">{npc.status}</div>
+                          <div className="text-[11px] text-[#6e6456] truncate mt-0.5">
+                            {npc.isGenerated && npc.personality ? `性格：${npc.personality}` : npc.status}
+                          </div>
                           <div className="text-[10px] text-[#8c7b65] mt-0.5">
-                            取向：{npc.orientation} · 好感 {npc.favorability}% · 点击召唤实时AI对话
+                            {npc.isGenerated && npc.encounterLocation
+                              ? `📍${npc.encounterLocation} · 好感 ${npc.favorability}% · 点击实时AI对话`
+                              : `取向：${npc.orientation} · 好感 ${npc.favorability}% · 点击召唤实时AI对话`}
                           </div>
                         </div>
                       </div>
@@ -1121,6 +1190,12 @@ export const SNSPhoneModal: React.FC<SNSPhoneModalProps> = ({
                 <Coins className="w-6 h-6 text-amber-300" />
               </div>
 
+              {isAlreadyWorkedToday && (
+                <div className="bg-amber-100 border border-amber-300 text-amber-900 p-2.5 rounded-xl text-xs font-bold">
+                  今日已完成兼职/代言，请推进日程到下一天后再继续！
+                </div>
+              )}
+
               {albaJobs.map((job) => (
                 <div
                   key={job.id}
@@ -1139,8 +1214,17 @@ export const SNSPhoneModal: React.FC<SNSPhoneModalProps> = ({
                     </div>
                   </div>
                   <button
-                    disabled={stats.stamina < job.staminaCost}
+                    disabled={isAlreadyWorkedToday || stats.stamina < job.staminaCost}
                     onClick={() => {
+                      if (isAlreadyWorkedToday) {
+                        onNotify('今日已完成兼职/代言，请推进日程到下一天！');
+                        return;
+                      }
+                      if (stats.stamina < job.staminaCost) {
+                        onNotify(`体力不足 ${job.staminaCost} 点，无法接单！`);
+                        return;
+                      }
+                      if (onRecordJobDone) onRecordJobDone();
                       onPublishPost(
                         {
                           id: `alba_${Date.now()}`,
@@ -1155,9 +1239,9 @@ export const SNSPhoneModal: React.FC<SNSPhoneModalProps> = ({
                       );
                       onNotify(`💼 兼职完成！入账 +₩${job.pay.toLocaleString()}！`);
                     }}
-                    className="px-3 py-2 bg-[#4b6b55] hover:bg-[#3d5946] disabled:opacity-45 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer"
+                    className="px-3 py-2 bg-[#4b6b55] hover:bg-[#3d5946] disabled:bg-gray-300 disabled:text-gray-600 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer"
                   >
-                    立即接单
+                    {isAlreadyWorkedToday ? '今日已完成该兼职/代言，请推进日程到下一天' : '立即接单'}
                   </button>
                 </div>
               ))}

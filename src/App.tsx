@@ -16,6 +16,9 @@ import {
   SNSPost,
   RelationshipStage,
   DiaryEntry,
+  WeeklyExecutionSummary,
+  PlayerTrait,
+  DynamicNPCEncounter,
 } from './types';
 import {
   initialStats,
@@ -26,7 +29,6 @@ import {
   locationScenes,
   getWeekCalendarInfo,
   computeRelationshipStage,
-  WEEKDAYS,
 } from './data/gameData';
 import { pickWeeklyEvent } from './data/eventsPool';
 import {
@@ -34,9 +36,18 @@ import {
   NPC_KOREAN_AVATARS_MAP,
   AVATAR_STYLE_PACKS,
 } from './data/koreanAvatars';
-import { generateDynamicCampusEvent } from './services/aiService';
+import {
+  generateDynamicCampusEvent,
+  generateDynamicNarrative,
+  generateNewNPCEncounter,
+} from './services/aiService';
+import {
+  convertEncounterToNPC,
+  DYNAMIC_NPC_FALLBACK_PRESETS,
+} from './data/encounterData';
 
 import { WeeklySchedulerModal } from './components/modals/WeeklySchedulerModal';
+import { EncounterModal } from './components/modals/EncounterModal';
 import { TimetableModal } from './components/modals/TimetableModal';
 import { ClubModal } from './components/modals/ClubModal';
 import { TraineeModal } from './components/modals/TraineeModal';
@@ -89,6 +100,7 @@ export default function App() {
   const [protagonistAvatarUrl, setProtagonistAvatarUrl] = useState<string>(AVATAR_SOOYEON_DEFAULT);
 
   const [npcs, setNpcs] = useState<NPCClassmate[]>(initialNPCs);
+  const [discoveredNpcList, setDiscoveredNpcList] = useState<NPCClassmate[]>([]);
   const [wardrobe, setWardrobe] = useState<WardrobeItem[]>(initialWardrobe);
   const [memories, setMemories] = useState<MemoryEntry[]>(initialMemories);
   const [examRecords, setExamRecords] = useState<ExamRecord[]>([]);
@@ -109,6 +121,26 @@ export default function App() {
   const [unlockedEndingIds, setUnlockedEndingIds] = useState<string[]>([]);
   const [chatHistories, setChatHistories] = useState<Record<string, ChatMessage[]>>({});
 
+  const [lastJobTurnKey, setLastJobTurnKey] = useState<string>(() => {
+    return localStorage.getItem('seoul_last_job_turn') || '';
+  });
+  const [lastExamKey, setLastExamKey] = useState<string>(() => {
+    return localStorage.getItem('seoul_last_exam_key') || '';
+  });
+
+  const currentTurnKey = `y${gradeYear}_w${weekInYear}`;
+  const currentWeekKey = `y${gradeYear}_w${weekInYear}`;
+
+  const handleRecordJobDone = () => {
+    setLastJobTurnKey(currentTurnKey);
+    localStorage.setItem('seoul_last_job_turn', currentTurnKey);
+  };
+
+  const handleRecordExamDone = () => {
+    setLastExamKey(currentWeekKey);
+    localStorage.setItem('seoul_last_exam_key', currentWeekKey);
+  };
+
   const [diaryEntries, setDiaryEntries] = useState<DiaryEntry[]>(() => {
     const saved = localStorage.getItem('seoul_heroine_diary');
     if (saved) {
@@ -121,7 +153,7 @@ export default function App() {
     return [
       {
         id: 'diary_init_1',
-        dateStr: '高一 第1周 周一',
+        dateStr: '高一 第1学期 第1周',
         title: '樱花开的初春，首尔女高开学日🌸',
         content: '今天第一天踏进首尔女高1-1班，同桌朴敏英人超好，还分给我她自己烘焙的小蛋挞！下课时在走廊遇到了风纪委员韩素拉，眼神好高冷，但我一定要和她成为好朋友！',
         mood: '期待',
@@ -166,6 +198,8 @@ export default function App() {
     useState<RelationshipChangePromptData | null>(null);
   const [isGeneratingAIEvent, setIsGeneratingAIEvent] = useState<boolean>(false);
   const [choiceResultData, setChoiceResultData] = useState<ChoiceResultData | null>(null);
+  const [activeEncounter, setActiveEncounter] = useState<DynamicNPCEncounter | null>(null);
+  const [snsInitialTab, setSnsInitialTab] = useState<'desktop' | 'stargram' | 'kakao'>('desktop');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const showNotification = (msg: string) => {
@@ -204,7 +238,8 @@ export default function App() {
         }
         if (parsed.npcs && Array.isArray(parsed.npcs)) {
           // Automatically migrate any old Unsplash or legacy avatars in localStorage to the upgraded Korean Webtoon portraits
-          const migratedNpcs = parsed.npcs.map((n: NPCClassmate) => {
+          const migratedNpcs: NPCClassmate[] = parsed.npcs.map((n: NPCClassmate) => {
+            if (n.isGenerated) return n;
             const freshAvatar = NPC_KOREAN_AVATARS_MAP[n.id];
             const isLegacyUnsplashOrOldSvg =
               !n.avatar ||
@@ -215,7 +250,20 @@ export default function App() {
               avatar: isLegacyUnsplashOrOldSvg && freshAvatar ? freshAvatar : n.avatar,
             };
           });
-          setNpcs(migratedNpcs);
+          const savedDiscovered: NPCClassmate[] = Array.isArray(parsed.discoveredNpcList)
+            ? parsed.discoveredNpcList
+            : migratedNpcs.filter((n) => n.isGenerated);
+          setDiscoveredNpcList(savedDiscovered);
+          const mergedNpcs = [...migratedNpcs];
+          savedDiscovered.forEach((d) => {
+            if (!mergedNpcs.some((existing) => existing.id === d.id)) {
+              mergedNpcs.push(d);
+            }
+          });
+          setNpcs(mergedNpcs);
+        } else if (Array.isArray(parsed.discoveredNpcList) && parsed.discoveredNpcList.length > 0) {
+          setDiscoveredNpcList(parsed.discoveredNpcList);
+          setNpcs([...initialNPCs, ...parsed.discoveredNpcList]);
         }
         if (parsed.wardrobe) setWardrobe(parsed.wardrobe);
         if (parsed.memories) setMemories(parsed.memories);
@@ -243,6 +291,7 @@ export default function App() {
         customBgUrl,
         protagonistAvatarUrl,
         npcs,
+        discoveredNpcList,
         wardrobe,
         memories,
         examRecords,
@@ -265,6 +314,7 @@ export default function App() {
     customBgUrl,
     protagonistAvatarUrl,
     npcs,
+    discoveredNpcList,
     wardrobe,
     memories,
     examRecords,
@@ -302,8 +352,7 @@ export default function App() {
 
   const currentDayCount = (gradeYear - 1) * 36 + weekInYear;
   const weekInfo = getWeekCalendarInfo(gradeYear, weekInYear);
-  const weekdayLabel = WEEKDAYS[dayInWeek % 7] || '周一';
-  const timeContextStr = `${weekInfo.calendarYear}年${weekInfo.month}月 第${weekInfo.weekOfMonth}周 ${weekdayLabel} (高${gradeYear}·第${weekInYear}周 · ${weekInfo.seasonName})`;
+  const timeContextStr = `${weekInfo.calendarYear}年${weekInfo.month}月 高${gradeYear}第${weekInYear <= 18 ? '上' : '下'}学期 第${weekInYear}周 (${weekInfo.seasonName})`;
 
   const selectedNpc = npcs.find((n) => n.id === selectedNpcId) || npcs[0];
   const targetNpc = npcs.find((n) => n.id === targetNpcId) || selectedNpc;
@@ -338,6 +387,8 @@ export default function App() {
         newStats.traineeProgress !== undefined
           ? Math.min(100, Math.max(0, newStats.traineeProgress))
           : prev.traineeProgress,
+      isDebutedIdol:
+        newStats.isDebutedIdol !== undefined ? newStats.isDebutedIdol : prev.isDebutedIdol,
       vocalSkill:
         newStats.vocalSkill !== undefined ? Math.min(100, Math.max(0, newStats.vocalSkill)) : prev.vocalSkill,
       danceSkill:
@@ -367,6 +418,8 @@ export default function App() {
       clubTeamwork: Math.min(100, Math.max(0, (prev.clubTeamwork || 40) + (delta.clubTeamwork || 0))),
       clubStagePower: Math.min(100, Math.max(0, (prev.clubStagePower || 38) + (delta.clubStagePower || 0))),
       traineeProgress: Math.min(100, Math.max(0, prev.traineeProgress + (delta.traineeProgress || 0))),
+      traineeGrade: delta.traineeGrade !== undefined ? delta.traineeGrade : prev.traineeGrade,
+      isDebutedIdol: delta.isDebutedIdol !== undefined ? delta.isDebutedIdol : prev.isDebutedIdol,
       vocalSkill: Math.min(100, Math.max(0, (prev.vocalSkill || 34) + (delta.vocalSkill || 0))),
       danceSkill: Math.min(100, Math.max(0, (prev.danceSkill || 38) + (delta.danceSkill || 0))),
       rapSkill: Math.min(100, Math.max(0, (prev.rapSkill || 30) + (delta.rapSkill || 0))),
@@ -519,7 +572,7 @@ export default function App() {
   const addGlobalMemory = (summary: string, category: MemoryEntry['category'] = 'life', npcId?: string) => {
     const newEntry: MemoryEntry = {
       id: `mem_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      dateStr: `${weekInfo.calendarYear}年${weekInfo.month}月 高${gradeYear}第${weekInYear}周·${weekdayLabel}`,
+      dateStr: `${weekInfo.calendarYear}年${weekInfo.month}月 高${gradeYear}第${weekInYear <= 18 ? '上' : '下'}学期 第${weekInYear}周`,
       npcId,
       summary,
       category,
@@ -557,6 +610,56 @@ export default function App() {
       ...prev,
       [npcId]: messages.slice(-30),
     }));
+  };
+
+  // Add newly discovered AI NPC into discoveredNpcList & npcs & initialize KakaoTalk greeting
+  const handleAddNewNPC = (newNpc: NPCClassmate) => {
+    setDiscoveredNpcList((prev) => {
+      if (prev.some((n) => n.id === newNpc.id || n.chineseName === newNpc.chineseName)) return prev;
+      return [...prev, newNpc];
+    });
+    setNpcs((prev) => {
+      if (prev.some((n) => n.id === newNpc.id || n.chineseName === newNpc.chineseName)) return prev;
+      return [...prev, newNpc];
+    });
+    setChatHistories((prev) => ({
+      ...prev,
+      [newNpc.id]: [
+        {
+          sender: 'npc',
+          text: `嗨秀妍！我是刚才在【${newNpc.encounterLocation || '首尔街头'}】偶遇的${newNpc.chineseName}（${newNpc.role}）~ 很高兴加上你的 KakaoTalk，以后常联系呀！`,
+          timeLabel: `高${gradeYear}第${weekInYear}周`,
+          actionDesc: `${newNpc.chineseName}发来了一张可爱的Kakao表情包，说话风格透着“${newNpc.speakingStyle || '自然亲切'}”的独特气息`,
+          innerThought: `没想到今天出门能偶遇秀妍这样投缘的新朋友！`,
+        },
+      ],
+    }));
+    addGlobalMemory(
+      `在【${newNpc.encounterLocation || '首尔街头'}】偶遇并结识了新朋友【${newNpc.chineseName}】（${newNpc.role}），交换了 KakaoTalk 联系方式。`,
+      'life',
+      newNpc.id
+    );
+  };
+
+  // Trigger a standalone AI Dynamic NPC Encounter
+  const handleTriggerRandomEncounter = async () => {
+    showNotification('✨ 正在首尔街头触发命运偶遇...');
+    try {
+      const enc = await generateNewNPCEncounter({
+        stats,
+        weekInYear,
+        gradeYear,
+        location,
+        aiConfig,
+      });
+      setActiveEncounter(enc);
+    } catch (_e) {
+      const fallback =
+        DYNAMIC_NPC_FALLBACK_PRESETS[
+          Math.floor(Math.random() * DYNAMIC_NPC_FALLBACK_PRESETS.length)
+        ];
+      setActiveEncounter(fallback);
+    }
   };
 
   // Exam Settlement Helper
@@ -617,64 +720,45 @@ export default function App() {
     return newRecord;
   };
 
-  // Slow-Paced Daily Progression (7 days per week = 756 days across 3 years so game never ends too fast!)
-  const handleAdvanceOneDay = () => {
-    const nextDay = dayInWeek + 1;
-
-    // Daily micro-growth & recovery
-    if (dayInWeek < 5) {
-      // Weekday: school classes + club/trainee practice
-      applyDeltaStats({
-        academics: 1,
-        clubSkill: 1,
-        stamina: stats.stamina < 25 ? 25 : -4,
-        mood: 1,
-      });
-    } else {
-      // Weekend: rest & social recovery
-      applyDeltaStats({
-        stamina: 18,
-        mood: 4,
-        social: 1,
-      });
-    }
-
-    if (nextDay < 7) {
-      setDayInWeek(nextDay);
-      const nextDayName = WEEKDAYS[nextDay];
-      showNotification(
-        `📅 进入高${gradeYear}第${weekInYear}周 · ${nextDayName}！${
-          nextDay === 2 || nextDay === 4
-            ? '放学后可前往【社团与比赛】或【练习生企划】体验专属突发事件与舞台！'
-            : ''
-        }`
-      );
-      // 45% chance on any day to trigger a rich campus / club / trainee / relationship story event!
-      if (Math.random() < 0.45) {
-        const ev = pickWeeklyEvent({
-          year: gradeYear,
-          week: weekInYear,
-          season: weekInfo.season,
-          stats,
-          npcs,
+  // Core Weekly Schedule Execution Handler (from WeeklySchedulerModal)
+  const handleCompleteWeeklyExecution = (
+    summary: WeeklyExecutionSummary,
+    combinedDeltas: Partial<GameStats>
+  ) => {
+    // 1. Update active traits if any unlocked
+    if (summary.unlockedTraits && summary.unlockedTraits.length > 0) {
+      setStats((prev) => {
+        const existingTraits = prev.activeTraits || [];
+        const mergedTraits = [...existingTraits];
+        summary.unlockedTraits.forEach((t: PlayerTrait) => {
+          if (!mergedTraits.some((ex) => ex.id === t.id)) {
+            mergedTraits.push(t);
+          }
         });
-        setActiveEvent(ev);
-      }
-      return;
+        return {
+          ...prev,
+          activeTraits: mergedTraits,
+        };
+      });
     }
 
-    // Completed all 7 days of the week -> advance to Monday of next week and credit weekly allowance!
-    setDayInWeek(0);
-    applyDeltaStats({
-      coins: stats.allowance,
-      stamina: 15,
-    });
+    // 2. Ensure stamina floor
+    if (stats.stamina + (combinedDeltas.stamina || 0) < 12) {
+      combinedDeltas.stamina = 25;
+      combinedDeltas.mood = (combinedDeltas.mood || 0) - 3;
+    }
+
+    const earnedCoins = combinedDeltas.coins || stats.allowance;
+    const memText = `完成了高${gradeYear}第${weekInYear}周 7 天核心决策日程巡礼，收获零花钱 +₩${earnedCoins.toLocaleString()}。`;
+
+    applyDeltaStats(combinedDeltas);
+    addGlobalMemory(memText, 'life');
 
     let examNotice = '';
     if (weekInfo.milestoneExam) {
       const rec = performExamSettlement(
         weekInfo.milestoneExam.type,
-        stats.academics,
+        stats.academics + (combinedDeltas.academics || 0),
         gradeYear,
         weekInYear
       );
@@ -695,12 +779,13 @@ export default function App() {
       }
     } else {
       showNotification(
-        `✨ 新的一周开始（高${nextYear}第${nextWeek}周·周一）！周零花钱 +₩${stats.allowance.toLocaleString()}${examNotice}`
+        `已推进至高${nextYear}第${nextWeek}周！零花钱 +₩${earnedCoins.toLocaleString()}${examNotice}`
       );
     }
 
     setGradeYear(nextYear);
     setWeekInYear(nextWeek);
+    setDayInWeek(0);
 
     const nextWeekInfo = getWeekCalendarInfo(nextYear, nextWeek);
     const ev = pickWeeklyEvent({
@@ -711,105 +796,7 @@ export default function App() {
       npcs,
     });
     setActiveEvent(ev);
-  };
-
-  // Core Weekly Turn Execution (from WeeklySchedulerModal)
-  const handleExecuteWeeklyTurn = (
-    selectedActions: WeeklyActionItem[],
-    preferredEventCategory?: EventCategory
-  ) => {
-    const combinedDelta: Partial<GameStats> = {
-      mood: 0,
-      stamina: 0,
-      academics: 0,
-      social: 0,
-      appearance: 0,
-      family: 0,
-      coins: stats.allowance,
-      snsFollowers: 0,
-      clubSkill: 0,
-      traineeProgress: 0,
-      darkIndex: 0,
-    };
-
-    selectedActions.forEach((act) => {
-      combinedDelta.stamina = (combinedDelta.stamina || 0) - act.staminaCost;
-      combinedDelta.mood = (combinedDelta.mood || 0) + (act.effect.mood || 0);
-      combinedDelta.academics = (combinedDelta.academics || 0) + (act.effect.academics || 0);
-      combinedDelta.social = (combinedDelta.social || 0) + (act.effect.social || 0);
-      combinedDelta.appearance = (combinedDelta.appearance || 0) + (act.effect.appearance || 0);
-      combinedDelta.family = (combinedDelta.family || 0) + (act.effect.family || 0);
-      combinedDelta.coins = (combinedDelta.coins || 0) + (act.effect.coins || 0);
-      combinedDelta.snsFollowers = (combinedDelta.snsFollowers || 0) + (act.effect.snsFollowers || 0);
-      combinedDelta.clubSkill = (combinedDelta.clubSkill || 0) + (act.effect.clubSkill || 0);
-      combinedDelta.traineeProgress = (combinedDelta.traineeProgress || 0) + (act.effect.traineeProgress || 0);
-      combinedDelta.darkIndex = (combinedDelta.darkIndex || 0) + (act.effect.darkIndex || 0);
-    });
-
-    if (stats.stamina + (combinedDelta.stamina || 0) < 12) {
-      combinedDelta.stamina = 35;
-      combinedDelta.mood = (combinedDelta.mood || 0) - 4;
-    }
-
-    const actionSummary = selectedActions.map((a) => a.name).join(' + ');
-    const memText = `完成了本周行动【${actionSummary}】，领取周零花钱 ₩${stats.allowance.toLocaleString()}。`;
-
-    setChoiceResultData({
-      title: `高${gradeYear}第${weekInYear}周 · 行动回合结算说明`,
-      description: `你顺利完成了本周排程：【${actionSummary}】，本周获得零花钱 ₩${stats.allowance.toLocaleString()}。`,
-      deltas: combinedDelta,
-      memoryLog: memText,
-      onConfirm: () => {
-        applyDeltaStats(combinedDelta);
-        addGlobalMemory(memText, 'life');
-
-        let examNotice = '';
-        if (weekInfo.milestoneExam) {
-          const rec = performExamSettlement(
-            weekInfo.milestoneExam.type,
-            stats.academics + (combinedDelta.academics || 0),
-            gradeYear,
-            weekInYear
-          );
-          examNotice = ` | 📢 ${rec.examName}: ${rec.score}分(${rec.gradeRank}等级)`;
-        }
-
-        let nextYear = gradeYear;
-        let nextWeek = weekInYear + 1;
-        if (nextWeek > 36) {
-          if (gradeYear < 3) {
-            nextYear = gradeYear + 1;
-            nextWeek = 1;
-            showNotification(`🌸 恭喜升入高${nextYear}学年（${2024 + nextYear}年3月）！新学期开始了！`);
-          } else {
-            setActiveModal('endings');
-            showNotification('🎓 三年高中生涯圆满结束！迎来了首尔女子高中毕业典礼与结局结算！');
-            setChoiceResultData(null);
-            return;
-          }
-        } else {
-          showNotification(
-            `已推进至高${nextYear}第${nextWeek}周！零花钱 +₩${stats.allowance.toLocaleString()}${examNotice}`
-          );
-        }
-
-        setGradeYear(nextYear);
-        setWeekInYear(nextWeek);
-        setDayInWeek(0);
-
-        const nextWeekInfo = getWeekCalendarInfo(nextYear, nextWeek);
-        const ev = pickWeeklyEvent({
-          year: nextYear,
-          week: nextWeek,
-          season: nextWeekInfo.season,
-          stats,
-          npcs,
-          preferredCategory: preferredEventCategory,
-        });
-        setActiveEvent(ev);
-        setChoiceResultData(null);
-      },
-    });
+    setChoiceResultData(null);
   };
 
   // Trigger Event from 220+ Pool or AI Engine
@@ -910,7 +897,7 @@ export default function App() {
     );
   };
 
-  const handleResolveEvent = (
+  const handleResolveEvent = async (
     effect: Partial<GameStats>,
     favChange?: { npcId: string; amount: number },
     memoryLog?: string
@@ -920,9 +907,33 @@ export default function App() {
       ? [{ npcId: favChange.npcId, npcName: targetNpc?.chineseName || favChange.npcId, amount: favChange.amount }]
       : [];
 
+    let desc = memoryLog || '你做出了抉择，校园生活因此留下了深刻的印记。';
+
+    try {
+      const res = await generateDynamicNarrative({
+        aiConfig,
+        context: {
+          sceneType: 'choice_option',
+          playerName: protagonistName,
+          stats,
+          choiceText: memoryLog || '做出抉择',
+          npc: targetNpc,
+          location,
+          timeContext: timeContextStr,
+        },
+      });
+
+      if (res.narrative) {
+        desc = res.narrative;
+        if (res.dialogue) desc += `\n\n💬【现场心境】: ${res.dialogue}`;
+      }
+    } catch (_e) {
+      console.warn('动态选项结果生成降级：', _e);
+    }
+
     setChoiceResultData({
       title: activeEvent?.title || '校园突发事件抉择说明',
-      description: memoryLog || '你做出了抉择，校园生活因此留下了深刻的印记。',
+      description: desc,
       deltas: effect,
       favorabilityChanges: favArr,
       memoryLog: memoryLog,
@@ -952,9 +963,10 @@ export default function App() {
     setWeekInYear(1);
     setDayInWeek(0);
     setNpcs(initialNPCs);
+    setDiscoveredNpcList([]);
     setMemories(initialMemories);
     setExamRecords([]);
-    showNotification('✨ 已开启新周目（2025年高一第1周·周一），已解锁的13大结局图鉴与衣橱已保留！');
+    showNotification('✨ 已开启新周目（2025年高一第1学期·第1周），已解锁的13大结局图鉴与衣橱已保留！');
   };
 
   return (
@@ -1017,7 +1029,6 @@ export default function App() {
         <MainHallway
           gradeYear={gradeYear}
           weekInYear={weekInYear}
-          dayInWeek={dayInWeek}
           stats={stats}
           location={location}
           customBgUrl={customBgUrl}
@@ -1027,7 +1038,6 @@ export default function App() {
           totalMemoriesCount={memories.length}
           onSelectNpc={(npc) => setSelectedNpcId(npc.id)}
           onOpenWeeklyScheduler={() => setActiveModal('weeklyTurn')}
-          onAdvanceOneDay={handleAdvanceOneDay}
           onOpenClubModal={() => setActiveModal('club')}
           onOpenTraineeModal={() => setActiveModal('trainee')}
           onTriggerRandomPoolEvent={() => handleTriggerEvent()}
@@ -1084,7 +1094,10 @@ export default function App() {
           gradeYear={gradeYear}
           weekInYear={weekInYear}
           stats={stats}
-          onExecuteTurn={handleExecuteWeeklyTurn}
+          aiConfig={aiConfig}
+          onCompleteWeeklyExecution={handleCompleteWeeklyExecution}
+          onAddNewNPC={handleAddNewNPC}
+          onNotify={showNotification}
           onJumpToWeek={(targetYr, targetWk, label) => {
             setGradeYear(targetYr);
             setWeekInYear(targetWk);
@@ -1137,6 +1150,9 @@ export default function App() {
           stats={stats}
           aiConfig={aiConfig}
           timeContext={timeContextStr}
+          lastJobTurnKey={lastJobTurnKey}
+          currentTurnKey={currentTurnKey}
+          onRecordJobDone={handleRecordJobDone}
           onUpdateStats={(newSt) => updateStats(newSt)}
           onNotify={(msg) => {
             addGlobalMemory(msg, 'life');
@@ -1150,6 +1166,10 @@ export default function App() {
         <ExtracurricularModal
           onClose={() => setActiveModal(null)}
           stats={stats}
+          aiConfig={aiConfig}
+          lastJobTurnKey={lastJobTurnKey}
+          currentTurnKey={currentTurnKey}
+          onRecordJobDone={handleRecordJobDone}
           onUpdateStats={(newSt) => updateStats(newSt)}
           onNotify={showNotification}
           onShowResultModal={(data) => {
@@ -1203,6 +1223,7 @@ export default function App() {
             setActiveModal('portraitWorkshop');
           }}
           onRequestStageChangePrompt={handleRequestStageChangePrompt}
+          onTriggerRandomEncounter={handleTriggerRandomEncounter}
         />
       )}
 
@@ -1226,20 +1247,33 @@ export default function App() {
         <GradesModal
           onClose={() => setActiveModal(null)}
           stats={stats}
+          aiConfig={aiConfig}
+          gradeYear={gradeYear}
+          weekInYear={weekInYear}
+          lastExamKey={lastExamKey}
+          onRecordExamDone={handleRecordExamDone}
           examRecords={examRecords}
           onTakeExam={(examType) => {
-            if (stats.stamina < 15) {
-              showNotification('体力不足15点，请先休息补充精力后再参加统考！');
-              return;
-            }
-            applyDeltaStats({ stamina: -15, academics: 3 });
-            const rec = performExamSettlement(examType, stats.academics + 3, gradeYear, weekInYear);
-            showNotification(`统考结算完成：${rec.examName} 考出 ${rec.score}分（第${rec.gradeRank}等级）！`);
+            performExamSettlement(examType, stats.academics + 3, gradeYear, weekInYear);
           }}
           onUpdateStats={updateStats}
           onNotify={(msg) => {
             addGlobalMemory(msg, 'family');
             showNotification(msg);
+          }}
+          onShowResultModal={(data) => {
+            setChoiceResultData({
+              title: data.title,
+              description: data.description,
+              deltas: data.deltas,
+              memoryLog: data.memoryLog,
+              onConfirm: () => {
+                updateStats(data.deltas);
+                addGlobalMemory(data.memoryLog, 'family');
+                setChoiceResultData(null);
+                setActiveModal(null);
+              },
+            });
           }}
         />
       )}
@@ -1262,7 +1296,7 @@ export default function App() {
       {(activeModal === 'timeManagement' || activeModal === 'diary') && (
         <DiaryModal
           onClose={() => setActiveModal(null)}
-          currentDateStr={`高${gradeYear} 第${weekInYear}周 周${WEEKDAYS[dayInWeek] || '一'}`}
+          currentDateStr={`高${gradeYear}·第${weekInYear <= 18 ? '上' : '下'}学期·第${weekInYear}周`}
           diaryEntries={diaryEntries}
           onSaveEntry={handleSaveDiaryEntry}
           onDeleteEntry={handleDeleteDiaryEntry}
@@ -1272,11 +1306,17 @@ export default function App() {
       {/* 10. Smartphone: Stargram SNS & KakaoTalk Modal */}
       {activeModal === 'snsPhone' && (
         <SNSPhoneModal
-          onClose={() => setActiveModal(null)}
+          onClose={() => {
+            setActiveModal(null);
+            setSnsInitialTab('desktop');
+          }}
           stats={stats}
           npcs={npcs}
           snsPosts={snsPosts}
-          weekLabel={`高${gradeYear}·第${weekInYear}周·${weekdayLabel}`}
+          weekLabel={`高${gradeYear}·第${weekInYear <= 18 ? '上' : '下'}学期·第${weekInYear}周`}
+          lastJobTurnKey={lastJobTurnKey}
+          currentTurnKey={currentTurnKey}
+          onRecordJobDone={handleRecordJobDone}
           onPublishPost={(newPost, delta) => {
             setSnsPosts((prev) => [newPost, ...prev]);
             applyDeltaStats(delta);
@@ -1288,6 +1328,8 @@ export default function App() {
           }}
           onOpenForum={() => setActiveModal('forum')}
           onNotify={showNotification}
+          initialTab={snsInitialTab}
+          onTriggerRandomEncounter={handleTriggerRandomEncounter}
         />
       )}
 
@@ -1339,6 +1381,7 @@ export default function App() {
           currentDay={currentDayCount}
           clockMinutes={clockMinutes}
           npcs={npcs}
+          discoveredNpcList={discoveredNpcList}
           wardrobe={wardrobe}
           memories={memories}
           chatHistories={chatHistories}
@@ -1349,7 +1392,17 @@ export default function App() {
             setWeekInYear(((loadedDay - 1) % 36) + 1);
             setDayInWeek(0);
             if (typeof data.clockMinutes === 'number') setClockMinutes(data.clockMinutes);
-            setNpcs(data.npcs);
+            const loadedDiscovered = Array.isArray(data.discoveredNpcList)
+              ? data.discoveredNpcList
+              : (data.npcs || []).filter((n) => n.isGenerated);
+            setDiscoveredNpcList(loadedDiscovered);
+            const mergedNpcs = [...(data.npcs || initialNPCs)];
+            loadedDiscovered.forEach((d) => {
+              if (!mergedNpcs.some((ex) => ex.id === d.id)) {
+                mergedNpcs.push(d);
+              }
+            });
+            setNpcs(mergedNpcs);
             setWardrobe(data.wardrobe);
             if (data.memories) setMemories(data.memories);
             if (data.chatHistories) setChatHistories(data.chatHistories);
@@ -1394,7 +1447,7 @@ export default function App() {
           aiConfig={aiConfig}
           location={location}
           timeContext={timeContextStr}
-          clockStr={`高${gradeYear}第${weekInYear}周·${weekdayLabel}`}
+          clockStr={`高${gradeYear}·第${weekInYear <= 18 ? '上' : '下'}学期·第${weekInYear}周`}
           chatHistory={chatHistories[targetNpc.id] || []}
           onUpdateChatHistory={updateChatHistory}
           onAddNpcMemory={addNpcMemory}
@@ -1416,7 +1469,7 @@ export default function App() {
           onRecordGiftMemory={(npcId, giftName, fav) => {
             addNpcMemory(
               npcId,
-              `[高${gradeYear}第${weekInYear}周·${weekdayLabel}] 秀妍送了我一份【${giftName}】（好感+${fav}%），我很喜欢。`
+              `[高${gradeYear}第${weekInYear}周] 秀妍送了我一份【${giftName}】（好感+${fav}%），我很喜欢。`
             );
           }}
           onNotify={showNotification}
@@ -1432,7 +1485,7 @@ export default function App() {
           onRecordLunchMemory={(npcId, spotName, fav) => {
             addNpcMemory(
               npcId,
-              `[高${gradeYear}第${weekInYear}周·${weekdayLabel}] 和秀妍一起去约会享用了【${spotName}】（好感+${fav}%），关系自然升温。`
+              `[高${gradeYear}第${weekInYear}周] 和秀妍一起去约会享用了【${spotName}】（好感+${fav}%），关系自然升温。`
             );
           }}
           onNotify={showNotification}
@@ -1481,6 +1534,34 @@ export default function App() {
 
       {/* 19. Choice / Action Result Popup Explanation Modal */}
       {choiceResultData && <ChoiceResultModal data={choiceResultData} />}
+
+      {/* 20. Standalone AI Dynamic NPC Encounter Modal */}
+      {activeEncounter && (
+        <EncounterModal
+          encounter={activeEncounter}
+          onConfirmFriend={() => {
+            const newNpc = convertEncounterToNPC(activeEncounter, gradeYear, weekInYear);
+            handleAddNewNPC(newNpc);
+            applyDeltaStats({ social: 5, mood: 6 });
+            showNotification(`✨ 结识了新朋友【${newNpc.chineseName}】！已加入手机通讯录与全向羁绊列表！`);
+            setActiveEncounter(null);
+          }}
+          onConfirmFriendAndOpenPhone={() => {
+            const newNpc = convertEncounterToNPC(activeEncounter, gradeYear, weekInYear);
+            handleAddNewNPC(newNpc);
+            applyDeltaStats({ social: 5, mood: 6 });
+            setActiveEncounter(null);
+            setSnsInitialTab('kakao');
+            setActiveModal('snsPhone');
+            showNotification(`💬 已添加【${newNpc.chineseName}】至 KakaoTalk 通讯录！点击即可开启实时 AI 聊天！`);
+          }}
+          onIgnore={() => {
+            showNotification(`👋 与【${activeEncounter.name}】微笑点头，擦肩而过。`);
+            setActiveEncounter(null);
+          }}
+          onClose={() => setActiveEncounter(null)}
+        />
+      )}
     </div>
   );
 }

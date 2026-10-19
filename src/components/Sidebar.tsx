@@ -6,7 +6,6 @@ import {
   Utensils,
   Gift,
   Palette,
-  ChevronLeft,
   Users,
   Compass,
   Menu,
@@ -41,10 +40,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     selectedNpc?.id || (npcs.length > 0 ? npcs[0].id : null)
   );
 
+  // Concise 2-4 character labels to eliminate ellipses completely
   const menuItems = [
     {
       id: 'weeklyTurn',
-      name: '周行动排程',
+      name: '日程安排',
       emoji: '🗓️',
     },
     {
@@ -64,52 +64,52 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'club',
-      name: '社团与比赛',
+      name: '社团比赛',
       emoji: '🏆',
     },
     {
       id: 'trainee',
-      name: '练习生企划',
+      name: '练习生',
       emoji: '🌟',
     },
     {
       id: 'timetable',
-      name: '课程与考场',
+      name: '课程考试',
       emoji: '📚',
     },
     {
       id: 'extracurricular',
-      name: '兼职与课外',
+      name: '兼职课外',
       emoji: '🏪',
     },
     {
       id: 'snsPhone',
-      name: '手机/SNS',
+      name: '手机通讯',
       emoji: '📱',
     },
     {
       id: 'wardrobe',
-      name: '穿搭/美妆',
+      name: '衣橱美妆',
       emoji: '👗',
     },
     {
       id: 'grades',
-      name: '成绩与家庭',
+      name: '成绩家庭',
       emoji: '🏡',
     },
     {
       id: 'lifePath',
-      name: '人生进阶',
+      name: '人生路线',
       emoji: '👑',
     },
     {
       id: 'endings',
-      name: '13结局图鉴',
+      name: '结局图鉴',
       emoji: '🎓',
     },
     {
       id: 'saveload',
-      name: '存档/读档',
+      name: '存读档案',
       emoji: '💾',
     },
   ];
@@ -136,7 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {activeTab === 'bonds' && (
         <>
           {/* Mobile layout placeholder so main screen does not shift */}
-          <div className="w-[56px] shrink-0 sm:hidden" />
+          <div className="w-[64px] shrink-0 sm:hidden" />
           {/* Mobile backdrop to close bond drawer */}
           <div
             className="sm:hidden fixed inset-0 bg-black/45 z-20 backdrop-blur-xs"
@@ -145,21 +145,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </>
       )}
 
+      {/* Left Sidebar Drawer (Frosted Glass Aesthetic) */}
       <aside
-        className={`z-30 flex flex-col bg-[#544d42]/95 sm:bg-[#8f897e]/65 backdrop-blur-md border-r border-[#d4cec3]/60 shadow-[4px_0_16px_rgba(0,0,0,0.22)] shrink-0 transition-all duration-200 ${
+        className={`z-30 flex flex-col bg-[#3a332a]/80 sm:bg-[#4a4237]/65 backdrop-blur-xl border-r border-white/20 shadow-[4px_0_20px_rgba(0,0,0,0.3)] shrink-0 transition-all duration-200 ${
           activeTab === 'bonds'
-            ? 'fixed sm:relative inset-y-0 left-0 w-[265px] sm:w-[260px] md:w-[280px] shadow-2xl'
-            : 'relative w-[56px] sm:w-[62px] md:w-[70px]'
+            ? 'fixed sm:relative inset-y-0 left-0 w-[270px] sm:w-[270px] md:w-[290px] shadow-2xl'
+            : 'relative w-[64px] sm:w-[72px] md:w-[80px]'
         }`}
       >
         {/* Top Dual Tab Switcher: Menu vs Bonds */}
-        <div className="p-1 sm:p-1.5 border-b border-[#c7bfb0]/70 flex items-center gap-1 bg-[#474136]/70 shrink-0">
+        <div className="p-1 sm:p-1.5 border-b border-white/15 flex items-center gap-1 bg-black/25 shrink-0">
           <button
             onClick={() => setActiveTab('menu')}
             title="系统功能菜单"
             className={`flex-1 py-1 px-1 rounded-lg text-[10px] sm:text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
               activeTab === 'menu'
-                ? 'bg-[#f5e8cf] text-[#332a1b] shadow-xs'
+                ? 'bg-[#f7edd8] text-[#332a1b] shadow-xs'
                 : 'text-[#e6ded0] hover:bg-white/10'
             }`}
           >
@@ -194,7 +195,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Mode A: Standard System Menu View */}
         {activeTab === 'menu' && (
           <div
-            className="flex-1 overflow-y-auto touch-scroll overscroll-contain pt-1.5 pb-16 px-1 flex flex-col gap-1.5 items-center no-scrollbar"
+            className="flex-1 overflow-y-auto touch-scroll overscroll-contain py-1.5 px-1 flex flex-col gap-1 sm:gap-1.5 items-center no-scrollbar"
             style={{ WebkitOverflowScrolling: 'touch' }}
           >
             {menuItems.map((item) => {
@@ -209,15 +210,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       onOpenModal(item.id);
                     }
                   }}
-                  className={`w-[48px] h-[44px] sm:w-[54px] sm:h-[48px] md:w-[62px] md:h-[50px] rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all duration-150 cursor-pointer select-none shrink-0 ${
+                  className={`w-[56px] h-[43px] sm:w-[64px] sm:h-[45px] md:w-[72px] md:h-[47px] rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all duration-150 cursor-pointer select-none shrink-0 ${
                     isActive
-                      ? 'bg-gradient-to-b from-[#efeadd] to-[#d4cab8] border-2 border-white shadow-[0_0_12px_rgba(255,248,230,0.7)] scale-105'
-                      : 'bg-gradient-to-b from-[#d8d3c8]/92 via-[#c6c0b4]/92 to-[#b0a99d]/92 hover:from-[#e6e1d6] hover:to-[#c2bbb0] border border-[#e6e1d8]/85 shadow-[0_2px_5px_rgba(0,0,0,0.22),inset_0_1px_1px_rgba(255,255,255,0.8)] active:scale-95'
+                      ? 'bg-gradient-to-b from-[#fffaf0] to-[#e8decb] border-2 border-amber-300 shadow-[0_0_12px_rgba(255,230,170,0.8)] scale-[1.04]'
+                      : 'bg-white/75 hover:bg-white/95 text-[#2b251e] border border-white/50 shadow-[0_2px_6px_rgba(0,0,0,0.18)] active:scale-95'
                   }`}
                   title={item.name}
                 >
-                  <span className="text-sm md:text-base leading-none drop-shadow-xs">{item.emoji}</span>
-                  <span className="text-[9px] sm:text-[10px] md:text-[11px] font-bold text-[#2b2620] tracking-tight leading-none mt-0.5 whitespace-nowrap truncate max-w-full px-0.5">
+                  <span className="text-sm sm:text-base leading-none drop-shadow-2xs">{item.emoji}</span>
+                  <span className="text-[10px] sm:text-[10.5px] font-black text-[#2b251e] tracking-tight leading-none mt-0.5 whitespace-nowrap px-0.5">
                     {item.name}
                   </span>
                 </button>
@@ -246,133 +247,133 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             </div>
 
-          <div className="space-y-1.5 flex-1">
-            {npcs.map((npc) => {
-              const isSelected = selectedNpc?.id === npc.id;
-              const isExpanded = expandedNpcId === npc.id;
+            <div className="space-y-1.5 flex-1">
+              {npcs.map((npc) => {
+                const isSelected = selectedNpc?.id === npc.id;
+                const isExpanded = expandedNpcId === npc.id;
 
-              return (
-                <div
-                  key={npc.id}
-                  className={`rounded-xl border transition-all overflow-hidden ${
-                    isSelected
-                      ? 'bg-[#f7f4ed] border-[#9c825b] shadow-md'
-                      : 'bg-[#ede7dc]/90 hover:bg-[#f6f2ea] border-[#cfc6b6]'
-                  }`}
-                >
-                  {/* Character Summary Row */}
+                return (
                   <div
-                    onClick={() => {
-                      onSelectNpc?.(npc);
-                      setExpandedNpcId(isExpanded ? null : npc.id);
-                    }}
-                    className="p-1.5 flex items-center justify-between cursor-pointer gap-2"
+                    key={npc.id}
+                    className={`rounded-xl border transition-all overflow-hidden ${
+                      isSelected
+                        ? 'bg-[#f7f4ed] border-[#9c825b] shadow-md'
+                        : 'bg-[#ede7dc]/90 hover:bg-[#f6f2ea] border-[#cfc6b6]'
+                    }`}
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="relative w-9 h-9 rounded-lg overflow-hidden border border-[#b8b0a2] shrink-0 bg-[#c7bfb2]">
-                        <img
-                          src={npc.avatar}
-                          alt={npc.chineseName}
-                          className="w-full h-full object-cover object-top"
-                          referrerPolicy="no-referrer"
-                        />
+                    {/* Character Summary Row */}
+                    <div
+                      onClick={() => {
+                        onSelectNpc?.(npc);
+                        setExpandedNpcId(isExpanded ? null : npc.id);
+                      }}
+                      className="p-1.5 flex items-center justify-between cursor-pointer gap-2"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="relative w-9 h-9 rounded-lg overflow-hidden border border-[#b8b0a2] shrink-0 bg-[#c7bfb2]">
+                          <img
+                            src={npc.avatar}
+                            alt={npc.chineseName}
+                            className="w-full h-full object-cover object-top"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                        <div className="min-w-0 leading-tight">
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span className="font-bold text-xs text-[#2b2620] truncate">
+                              {npc.chineseName}
+                            </span>
+                            <span
+                              className={`text-[9px] font-bold px-1 py-0.2 rounded leading-none ${getStageBadgeColor(
+                                npc.relationshipStage
+                              )}`}
+                            >
+                              {npc.relationshipStage}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-[#635a4d] mt-0.5 truncate">
+                            好感 {npc.favorability}%
+                            {typeof npc.romancePoints === 'number' && npc.romancePoints > 0 && (
+                              <span className="text-pink-600 ml-1">· 心动 {npc.romancePoints}</span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="min-w-0 leading-tight">
-                        <div className="flex items-center gap-1 flex-wrap">
-                          <span className="font-bold text-xs text-[#2b2620] truncate">
-                            {npc.chineseName}
-                          </span>
-                          <span
-                            className={`text-[9px] font-bold px-1 py-0.2 rounded leading-none ${getStageBadgeColor(
-                              npc.relationshipStage
-                            )}`}
+
+                      <span className="text-[10px] text-[#8c8273] shrink-0">
+                        {isExpanded ? '▲' : '▼'}
+                      </span>
+                    </div>
+
+                    {/* Quick Action Buttons */}
+                    {isExpanded && (
+                      <div className="p-1.5 pt-0 border-t border-[#dfd8cc] bg-white/50 space-y-1">
+                        <div className="text-[10px] text-[#736756] truncate italic px-1 pt-0.5">
+                          {npc.role} · {npc.mbti || '真实高中人设'}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-1 pt-0.5">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenChat?.(npc);
+                            }}
+                            className="py-1 px-1 rounded-md bg-gradient-to-b from-[#e3dac7] to-[#ccbea2] hover:from-[#eee4ce] hover:to-[#d8caba] text-[#3b3020] text-[10px] font-bold flex items-center justify-center gap-1 shadow-2xs border border-white/60 cursor-pointer"
                           >
-                            {npc.relationshipStage}
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-[#635a4d] mt-0.5 truncate">
-                          好感 {npc.favorability}%
-                          {typeof npc.romancePoints === 'number' && npc.romancePoints > 0 && (
-                            <span className="text-pink-600 ml-1">· 心动 {npc.romancePoints}</span>
-                          )}
+                            <MessageCircle className="w-2.5 h-2.5" />
+                            <span>聊天</span>
+                          </button>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenLunch?.(npc);
+                            }}
+                            className="py-1 px-1 rounded-md bg-gradient-to-b from-[#dfd3b8] to-[#cca783] hover:from-[#ede1c7] hover:to-[#dbb591] text-[#382617] text-[10px] font-bold flex items-center justify-center gap-1 shadow-2xs border border-white/60 cursor-pointer"
+                          >
+                            <Utensils className="w-2.5 h-2.5" />
+                            <span>约会</span>
+                          </button>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenGift?.(npc);
+                            }}
+                            className="py-1 px-1 rounded-md bg-gradient-to-b from-[#eed4d9] to-[#d9a8b5] hover:from-[#fae3e8] hover:to-[#e6b8c4] text-[#4a222f] text-[10px] font-bold flex items-center justify-center gap-1 shadow-2xs border border-white/60 cursor-pointer"
+                          >
+                            <Gift className="w-2.5 h-2.5" />
+                            <span>送礼</span>
+                          </button>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenPortraitModal?.(npc.id);
+                            }}
+                            className="py-1 px-1 rounded-md bg-white hover:bg-rose-50 text-rose-700 text-[10px] font-bold flex items-center justify-center gap-1 shadow-2xs border border-[#cfc4b2] cursor-pointer"
+                          >
+                            <Palette className="w-2.5 h-2.5" />
+                            <span>改立绘</span>
+                          </button>
                         </div>
                       </div>
-                    </div>
-
-                    <span className="text-[10px] text-[#8c8273] shrink-0">
-                      {isExpanded ? '▲' : '▼'}
-                    </span>
+                    )}
                   </div>
+                );
+              })}
+            </div>
 
-                  {/* Quick Action Buttons (shown when clicked / expanded) */}
-                  {isExpanded && (
-                    <div className="p-1.5 pt-0 border-t border-[#dfd8cc] bg-white/50 space-y-1">
-                      <div className="text-[10px] text-[#736756] truncate italic px-1 pt-0.5">
-                        {npc.role} · {npc.mbti || '真实高中人设'}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-1 pt-0.5">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenChat?.(npc);
-                          }}
-                          className="py-1 px-1 rounded-md bg-gradient-to-b from-[#e3dac7] to-[#ccbea2] hover:from-[#eee4ce] hover:to-[#d8caba] text-[#3b3020] text-[10px] font-bold flex items-center justify-center gap-1 shadow-2xs border border-white/60 cursor-pointer"
-                        >
-                          <MessageCircle className="w-2.5 h-2.5" />
-                          <span>聊天</span>
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenLunch?.(npc);
-                          }}
-                          className="py-1 px-1 rounded-md bg-gradient-to-b from-[#dfd3b8] to-[#cca783] hover:from-[#ede1c7] hover:to-[#dbb591] text-[#382617] text-[10px] font-bold flex items-center justify-center gap-1 shadow-2xs border border-white/60 cursor-pointer"
-                        >
-                          <Utensils className="w-2.5 h-2.5" />
-                          <span>约会</span>
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenGift?.(npc);
-                          }}
-                          className="py-1 px-1 rounded-md bg-gradient-to-b from-[#eed4d9] to-[#d9a8b5] hover:from-[#fae3e8] hover:to-[#e6b8c4] text-[#4a222f] text-[10px] font-bold flex items-center justify-center gap-1 shadow-2xs border border-white/60 cursor-pointer"
-                        >
-                          <Gift className="w-2.5 h-2.5" />
-                          <span>送礼</span>
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenPortraitModal?.(npc.id);
-                          }}
-                          className="py-1 px-1 rounded-md bg-white hover:bg-rose-50 text-rose-700 text-[10px] font-bold flex items-center justify-center gap-1 shadow-2xs border border-[#cfc4b2] cursor-pointer"
-                        >
-                          <Palette className="w-2.5 h-2.5" />
-                          <span>改立绘</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {/* Full Relationship Modal Launcher Button */}
+            <button
+              onClick={() => onOpenModal('relationships')}
+              className="w-full py-1.5 px-2 bg-gradient-to-r from-[#6e5d53] to-[#8a7569] text-white text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 shadow-sm hover:opacity-95 cursor-pointer mt-1"
+            >
+              <Compass className="w-3 h-3 text-amber-200" />
+              <span>打开羁绊关系与画风总览</span>
+            </button>
           </div>
-
-          {/* Full Relationship Modal Launcher Button */}
-          <button
-            onClick={() => onOpenModal('relationships')}
-            className="w-full py-1.5 px-2 bg-gradient-to-r from-[#6e5d53] to-[#8a7569] text-white text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 shadow-sm hover:opacity-95 cursor-pointer mt-1"
-          >
-            <Compass className="w-3 h-3 text-amber-200" />
-            <span>打开羁绊关系与画风总览</span>
-          </button>
-        </div>
-      )}
+        )}
       </aside>
     </>
   );

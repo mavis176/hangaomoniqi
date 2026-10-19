@@ -19,8 +19,8 @@ import { generateAICharacterAvatar } from '../../services/aiService';
 interface RelationshipModalProps {
   onClose: () => void;
   npcs: NPCClassmate[];
-  clockMinutes: number;
-  weekdayIndex: number;
+  clockMinutes?: number;
+  weekdayIndex?: number;
   onOpenChat: (npc: NPCClassmate) => void;
   onOpenLunch: (npc: NPCClassmate) => void;
   onOpenGift: (npc: NPCClassmate) => void;
@@ -29,6 +29,7 @@ interface RelationshipModalProps {
   onUpdateNpcAvatar?: (npcId: string, newAvatarUrl: string) => void;
   onOpenPortraitModal?: (npcId?: string) => void;
   onRequestStageChangePrompt?: (npc: NPCClassmate) => void;
+  onTriggerRandomEncounter?: () => void;
 }
 
 export const RelationshipModal: React.FC<RelationshipModalProps> = ({
@@ -42,16 +43,22 @@ export const RelationshipModal: React.FC<RelationshipModalProps> = ({
   onUpdateNpcAvatar,
   onOpenPortraitModal,
   onRequestStageChangePrompt,
+  onTriggerRandomEncounter,
 }) => {
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('all');
   const [editingNpcId, setEditingNpcId] = useState<string | null>(null);
   const [generatingNpcId, setGeneratingNpcId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const roles = ['all', '同班同学', '补习班同学', '社团前辈', '运动部成员', '转学生', '学生会成员', '老师或职员'];
+  const dynamicCount = npcs.filter((n) => n.isGenerated).length;
+  const roles = ['all', '✨动态邂逅', '同班同学', '补习班同学', '社团前辈', '运动部成员', '转学生', '学生会成员', '老师或职员'];
 
   const filteredNpcs =
-    selectedRoleFilter === 'all' ? npcs : npcs.filter((n) => n.role === selectedRoleFilter);
+    selectedRoleFilter === 'all'
+      ? npcs
+      : selectedRoleFilter === '✨动态邂逅'
+      ? npcs.filter((n) => n.isGenerated)
+      : npcs.filter((n) => n.role === selectedRoleFilter);
 
   const handleNpcFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -142,20 +149,33 @@ export const RelationshipModal: React.FC<RelationshipModalProps> = ({
         )}
 
         {/* Filter Bar */}
-        <div className="px-4 pt-2.5 pb-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-          {roles.map((r) => (
+        <div className="px-4 pt-2.5 pb-1 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+            {roles.map((r) => (
+              <button
+                key={r}
+                onClick={() => setSelectedRoleFilter(r)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap cursor-pointer ${
+                  selectedRoleFilter === r
+                    ? 'bg-[#6e5d53] text-white'
+                    : 'bg-[#e6dfd3] text-[#4a4238] hover:bg-[#d8cfc0]'
+                }`}
+              >
+                {r === 'all' ? '全部角色' : r === '✨动态邂逅' ? `✨动态邂逅 (${dynamicCount})` : r}
+              </button>
+            ))}
+          </div>
+
+          {onTriggerRandomEncounter && (
             <button
-              key={r}
-              onClick={() => setSelectedRoleFilter(r)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap cursor-pointer ${
-                selectedRoleFilter === r
-                  ? 'bg-[#6e5d53] text-white'
-                  : 'bg-[#e6dfd3] text-[#4a4238] hover:bg-[#d8cfc0]'
-              }`}
+              onClick={onTriggerRandomEncounter}
+              className="px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-white text-xs font-black flex items-center gap-1 whitespace-nowrap shadow-xs cursor-pointer shrink-0"
+              title="立即调用 AI 在首尔街头偶遇一位全新人物"
             >
-              {r === 'all' ? '全部角色' : r}
+              <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+              <span>偶遇新人物</span>
             </button>
-          ))}
+          )}
         </div>
 
         {/* NPC Cards */}
@@ -252,6 +272,11 @@ export const RelationshipModal: React.FC<RelationshipModalProps> = ({
                         <span className="px-2 py-0.5 bg-purple-50 text-purple-800 border border-purple-200 rounded font-bold">
                           取向：{npc.orientation}
                         </span>
+                        {npc.isGenerated && (
+                          <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded font-bold">
+                            ✨ 第{npc.encounterWeek || 1}周结识 · {npc.encounterLocation || '首尔街头'}
+                          </span>
+                        )}
                       </div>
 
                       {/* Favorability & Romance Progress Bar */}

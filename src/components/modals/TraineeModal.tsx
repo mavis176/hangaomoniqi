@@ -18,8 +18,13 @@ import {
   Crown,
   Send,
   ShieldAlert,
+  ShieldCheck,
   Dice5,
   Zap,
+  Lock,
+  Building2,
+  Loader2,
+  Check,
 } from 'lucide-react';
 import {
   GameStats,
@@ -36,7 +41,10 @@ import {
   TraineeSuddenIncident,
   TraineeEvaluationStage,
 } from '../../data/clubAndTraineeData';
-import { generateTraineeSurvivalMission } from '../../services/aiService';
+import {
+  generateTraineeSurvivalMission,
+  generateDynamicNarrative,
+} from '../../services/aiService';
 import { defaultAIConfig } from '../../data/gameData';
 
 interface TraineeModalProps {
@@ -44,26 +52,84 @@ interface TraineeModalProps {
   stats: GameStats;
   aiConfig?: AIConfig;
   timeContext?: string;
+  lastJobTurnKey?: string;
+  currentTurnKey?: string;
+  onRecordJobDone?: () => void;
   onUpdateStats: (newStats: Partial<GameStats>) => void;
   onNotify: (msg: string) => void;
 }
 
-const GRADE_LADDER: { grade: TraineeGradeType; minProgress: number; badge: string }[] = [
-  { grade: '未签约练习生', minProgress: 0, badge: 'bg-stone-200 text-stone-700' },
-  { grade: 'C班练习生', minProgress: 15, badge: 'bg-sky-100 text-sky-800' },
-  { grade: 'B班潜力股', minProgress: 35, badge: 'bg-emerald-100 text-emerald-800' },
-  { grade: 'A班ACE王牌', minProgress: 58, badge: 'bg-purple-100 text-purple-800' },
-  { grade: '出道预备组Center', minProgress: 78, badge: 'bg-rose-100 text-rose-800' },
-  { grade: 'S级·顶流C位出道', minProgress: 94, badge: 'bg-amber-200 text-amber-950' },
+const GRADE_LADDER: { grade: TraineeGradeType; minProgress: number; badge: string; desc: string }[] = [
+  { grade: '未签约普通学生', minProgress: 0, badge: 'bg-stone-200 text-stone-700', desc: '首尔女高普通学生，尚未签约娱企' },
+  { grade: 'D班练习生', minProgress: 10, badge: 'bg-stone-100 text-stone-700', desc: '签约起步，基础练习生' },
+  { grade: 'C班练习生', minProgress: 25, badge: 'bg-sky-100 text-sky-800', desc: '掌握基础唱跳，大班排练' },
+  { grade: 'B班潜力股', minProgress: 45, badge: 'bg-emerald-100 text-emerald-800', desc: '崭露头角，重点梯队' },
+  { grade: 'A班ACE王牌', minProgress: 70, badge: 'bg-purple-100 text-purple-800', desc: '全能六边形王牌，触发出道资格考核' },
+  { grade: '出道预备组Center', minProgress: 85, badge: 'bg-rose-100 text-rose-800', desc: '锁定新女团核心C位，等待终选出道战' },
+  { grade: 'S级·顶流C位出道', minProgress: 100, badge: 'bg-amber-300 text-amber-950 font-black', desc: '通过终审出道战，正式成为顶级Idol' },
 ];
 
-export function computeTraineeGrade(progress: number, agencyId: string | null): TraineeGradeType {
-  if (!agencyId && progress < 15) return '未签约练习生';
-  if (progress >= 94) return 'S级·顶流C位出道';
-  if (progress >= 78) return '出道预备组Center';
-  if (progress >= 58) return 'A班ACE王牌';
-  if (progress >= 35) return 'B班潜力股';
-  return 'C班练习生';
+export function computeTraineeGrade(
+  progress: number,
+  agencyId: string | null,
+  isDebutedIdol?: boolean
+): TraineeGradeType {
+  if (isDebutedIdol) return 'S级·顶流C位出道';
+  if (!agencyId) return '未签约普通学生';
+  if (progress >= 85) return '出道预备组Center';
+  if (progress >= 70) return 'A班ACE王牌';
+  if (progress >= 45) return 'B班潜力股';
+  if (progress >= 25) return 'C班练习生';
+  return 'D班练习生';
+}
+
+export function checkDebutEligibility(stats: GameStats): {
+  isEligible: boolean;
+  hasAgency: boolean;
+  hasGrade: boolean;
+  hasVocal: boolean;
+  hasDance: boolean;
+  hasCamera: boolean;
+  hasStamina: boolean;
+  agencyName: string;
+  reasons: string[];
+} {
+  const hasAgency = Boolean(stats.agencyId);
+  const hasGrade =
+    stats.traineeGrade === 'A班ACE王牌' ||
+    stats.traineeGrade === '出道预备组Center' ||
+    stats.traineeProgress >= 70;
+  const hasVocal = (stats.vocalSkill || 0) >= 60;
+  const hasDance = (stats.danceSkill || 0) >= 60;
+  const hasCamera = (stats.cameraSkill || 0) >= 50;
+  const hasStamina = (stats.stamina || 0) >= 20;
+
+  const reasons: string[] = [];
+  if (!hasAgency) reasons.push('需先签约四大娱乐企划社（HYBE/SM/YG/JYP）');
+  if (!hasGrade) reasons.push('练习生等级需升至【A班ACE王牌】或【出道预备组Center】（综合进度 ≥ 70%）');
+  if (!hasVocal) reasons.push(`声乐 Vocal 需达到 60 分（当前：${stats.vocalSkill || 0}/60）`);
+  if (!hasDance) reasons.push(`舞蹈 Dance 需达到 60 分（当前：${stats.danceSkill || 0}/60）`);
+  if (!hasCamera) reasons.push(`镜头表现力需达到 50 分（当前：${stats.cameraSkill || 0}/50）`);
+  if (!hasStamina) reasons.push('出道终审战需消耗 20 点体力');
+
+  const agencyMap: Record<string, string> = {
+    hybe: 'HYBE Labels (Ador/Source)',
+    sm: 'SM Entertainment (KWANGYA)',
+    yg: 'YG Entertainment (The Black)',
+    jyp: 'JYP Entertainment (JYP NATION)',
+  };
+
+  return {
+    isEligible: hasAgency && hasGrade && hasVocal && hasDance && hasCamera && hasStamina,
+    hasAgency,
+    hasGrade,
+    hasVocal,
+    hasDance,
+    hasCamera,
+    hasStamina,
+    agencyName: stats.agencyId ? agencyMap[stats.agencyId] || stats.agencyId : '未签约',
+    reasons,
+  };
 }
 
 interface SurvivalTestThemeConfig {
@@ -333,12 +399,18 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
   stats,
   aiConfig = defaultAIConfig,
   timeContext = '2025年春季学期',
+  lastJobTurnKey,
+  currentTurnKey,
+  onRecordJobDone,
   onUpdateStats,
   onNotify,
 }) => {
+  const isAlreadyWorkedToday =
+    Boolean(lastJobTurnKey) && Boolean(currentTurnKey) && lastJobTurnKey === currentTurnKey;
+
   const [activeTab, setActiveTab] = useState<
     'survival_test' | 'survival_ai' | 'post_debut' | 'monthly_eval' | 'training'
-  >('survival_test');
+  >(stats.isDebutedIdol ? 'post_debut' : 'training');
 
   // ==================== NEW: 出道后·顶流爱豆生涯 (Post-Debut Idol Career) State ====================
   const [albumTitleInput, setAlbumTitleInput] = useState<string>('');
@@ -444,6 +516,21 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
     });
   };
 
+  // ==================== NEW: 出道选拔终审战 (Final Debut Showcase) State ====================
+  const [isExecutingDebutShowcase, setIsExecutingDebutShowcase] = useState<boolean>(false);
+  const [debutShowcaseResult, setDebutShowcaseResult] = useState<{
+    passed: boolean;
+    finalScore: number;
+    vocalScore: number;
+    danceScore: number;
+    cameraScore: number;
+    narrative: string;
+    mentorCritique: string;
+  } | null>(null);
+  const [showDebutCelebrationModal, setShowDebutCelebrationModal] = useState<boolean>(false);
+
+  const debutEligibility = checkDebutEligibility(stats);
+
   const currentAgency = AGENCIES_DATA.find((a) => a.id === stats.agencyId);
   const agencyDisplayName = currentAgency ? currentAgency.name : '四大社联合选秀训练营';
   const vocal = stats.vocalSkill || 34;
@@ -451,6 +538,124 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
   const rap = stats.rapSkill || 30;
   const camera = stats.cameraSkill || 40;
   const avgFourDim = Math.round((vocal + dance + rap + camera) / 4);
+
+  const handleExecuteDebutShowcase = async () => {
+    const eligibility = checkDebutEligibility(stats);
+    if (!eligibility.isEligible) {
+      onNotify('⚠️ 尚未达成全部出道门槛：' + eligibility.reasons.join('；'));
+      return;
+    }
+    if (stats.stamina < 20) {
+      onNotify('⚠️ 体力不足 20 点，无法支持高强度终审考核！请先休息。');
+      return;
+    }
+
+    setIsExecutingDebutShowcase(true);
+    setDebutShowcaseResult(null);
+
+    // Compute scores based on real player skills
+    const vocalScore = Math.min(100, Math.round(vocal * 0.9 + Math.random() * 15));
+    const danceScore = Math.min(100, Math.round(dance * 0.9 + Math.random() * 15));
+    const cameraScore = Math.min(100, Math.round(camera * 0.9 + Math.random() * 15));
+    const finalScore = Math.round(vocalScore * 0.35 + danceScore * 0.35 + cameraScore * 0.3);
+    const passed = finalScore >= 68;
+
+    let narrative = '';
+    let mentorCritique = '';
+
+    try {
+      const aiResult = await generateDynamicNarrative({
+        aiConfig,
+        context: {
+          sceneType: 'trainee_eval',
+          actionName: '出道选拔终选战 (Final Debut Showcase)',
+          playerName: '李秀妍',
+          stats,
+        },
+      });
+      if (aiResult?.narrative) {
+        narrative = aiResult.narrative;
+        mentorCritique =
+          aiResult.mentorVerdict?.critique ||
+          aiResult.dialogue ||
+          (passed
+            ? '“无论是高音的稳定度还是绝杀Ending的眼神，你已经完全具备现役顶流的统治力。出道吧，李秀妍！”'
+            : '“舞步很到位，但声音有些许颤抖。我们需要的是绝对控场的舞台主宰，再精进一下发声吧。”');
+      }
+    } catch {
+      // fallback
+    }
+
+    if (!narrative) {
+      if (passed) {
+        narrative = `在全场总制作人与高管的屏息注视下，李秀妍以毫无失误的刀群舞卡点与通透的三段升Key高音引爆了终审主舞台！掌声在评审席雷动，大屏幕亮起全绿灯“DEBUT CONFIRMED”！`;
+        mentorCritique = `“毫无疑问的断层第一。你的舞台饥饿感与统治力，就是我们寻觅已久的五代C位核心。恭喜正式出道！”`;
+      } else {
+        narrative = `终审舞台灯光炫目，但在挑战高难度连续旋转动作时步伐出现微小偏差。虽然整体表现优异，但挑剔的总制作人最终亮起了代表观望的黄灯。`;
+        mentorCritique = `“你的技术很扎实，但情绪表达还稍显紧绷。再沉淀两周，下一次舞台我们期待看到更松弛霸气的你。”`;
+      }
+    }
+
+    setIsExecutingDebutShowcase(false);
+
+    setDebutShowcaseResult({
+      passed,
+      finalScore,
+      vocalScore,
+      danceScore,
+      cameraScore,
+      narrative,
+      mentorCritique,
+    });
+
+    if (passed) {
+      // Formally promote player to Debuted Idol!
+      onUpdateStats({
+        isDebutedIdol: true,
+        traineeGrade: 'S级·顶流C位出道',
+        traineeProgress: 100,
+        stamina: Math.max(0, stats.stamina - 20),
+        coins: stats.coins + 300000,
+        snsFollowers: stats.snsFollowers + 35000,
+      });
+
+      appendEvalRecord({
+        id: `debut_${Date.now()}`,
+        dateLabel: timeContext,
+        missionTitle: '出道选拔终选战 (Final Debut Showcase)',
+        categoryLabel: '出道终审·加冕战',
+        finalScore,
+        evalRank: 'S+',
+        followerGain: 35000,
+        resultingGrade: 'S级·顶流C位出道',
+        mentorSummary: `【终审全票通过】以 ${finalScore} 高分通过出道考核，正式出道加冕顶流Center！`,
+      });
+
+      setShowDebutCelebrationModal(true);
+      onNotify('🎊 恭喜李秀妍以断层第1绝对实力通过出道终审！正式加冕【S级·顶流C位出道】！');
+    } else {
+      onUpdateStats({
+        stamina: Math.max(0, stats.stamina - 20),
+        traineeProgress: Math.min(100, stats.traineeProgress + 3),
+        vocalSkill: Math.min(100, vocal + 1),
+        danceSkill: Math.min(100, dance + 1),
+      });
+
+      appendEvalRecord({
+        id: `debut_fail_${Date.now()}`,
+        dateLabel: timeContext,
+        missionTitle: '出道选拔终选战 (Final Debut Showcase)',
+        categoryLabel: '出道终审·实战考核',
+        finalScore,
+        evalRank: 'A',
+        followerGain: 500,
+        resultingGrade: stats.traineeGrade,
+        mentorSummary: `【考核暂缓】终审得分 ${finalScore} 分，虽有遗憾但实力进一步精进，继续冲刺！`,
+      });
+
+      onNotify('⚠️ 出道终审暂未通过，扣除 20 点体力。请继续在练习室磨炼！');
+    }
+  };
 
   // Generate AI Random Monthly Survival Test Theme (刀群舞 / 创作竞赛 / 个人Live / 概念直拍)
   const handleGenerateSurvivalTest = async (forceRandom = true, themeIdOverride?: SurvivalTestThemeConfig['id']) => {
@@ -560,7 +765,7 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
         : -4;
 
     const nextProgress = Math.min(100, Math.max(0, stats.traineeProgress + progressDelta));
-    const nextGrade = computeTraineeGrade(nextProgress, stats.agencyId || 'hybe');
+    const nextGrade = computeTraineeGrade(nextProgress, stats.agencyId || 'hybe', stats.isDebutedIdol);
 
     onUpdateStats({
       stamina: Math.max(0, stats.stamina - 10),
@@ -614,7 +819,7 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
       100,
       Math.max(0, stats.traineeProgress + (choice.delta.traineeProgress || 0))
     );
-    const nextGrade = computeTraineeGrade(nextProgress, stats.agencyId || 'hybe');
+    const nextGrade = computeTraineeGrade(nextProgress, stats.agencyId || 'hybe', stats.isDebutedIdol);
 
     onUpdateStats({
       vocalSkill: Math.min(100, vocal + (choice.delta.vocalSkill || 0)),
@@ -639,7 +844,7 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
     const ag = AGENCIES_DATA.find((a) => a.id === agencyId);
     if (!ag) return;
     const nextProg = Math.max(20, stats.traineeProgress);
-    const nextGrade = computeTraineeGrade(nextProg, agencyId);
+    const nextGrade = computeTraineeGrade(nextProg, agencyId, stats.isDebutedIdol);
     onUpdateStats({
       agencyId,
       traineeProgress: nextProg,
@@ -700,9 +905,9 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
     const progressGain = Math.max(6, Math.round(baseProg * rankMultiplier));
     const coinsGain = Math.round((opt.effect.coins || 55000) * rankMultiplier);
 
-    const prevGrade = stats.traineeGrade || computeTraineeGrade(stats.traineeProgress, stats.agencyId);
+    const prevGrade = stats.traineeGrade || computeTraineeGrade(stats.traineeProgress, stats.agencyId, stats.isDebutedIdol);
     const nextProgress = Math.min(100, stats.traineeProgress + progressGain);
-    const nextGrade = computeTraineeGrade(nextProgress, stats.agencyId || 'hybe');
+    const nextGrade = computeTraineeGrade(nextProgress, stats.agencyId || 'hybe', stats.isDebutedIdol);
 
     onUpdateStats({
       vocalSkill: Math.min(100, vocal + (opt.effect.vocalSkill || 4)),
@@ -769,7 +974,7 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
       rapSkill: nextRap,
       cameraSkill: nextCam,
       traineeProgress: nextProg,
-      traineeGrade: computeTraineeGrade(nextProg, stats.agencyId),
+      traineeGrade: computeTraineeGrade(nextProg, stats.agencyId, stats.isDebutedIdol),
       stamina: Math.max(0, stats.stamina - 10),
     });
 
@@ -796,7 +1001,7 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
       mood: Math.min(100, Math.max(0, stats.mood + (opt.effect.mood || 0))),
       snsFollowers: stats.snsFollowers + (opt.effect.snsFollowers || 0),
       traineeProgress: nextProg,
-      traineeGrade: computeTraineeGrade(nextProg, stats.agencyId),
+      traineeGrade: computeTraineeGrade(nextProg, stats.agencyId, stats.isDebutedIdol),
     });
     setIncidentOutcome(opt.outcomeText);
   };
@@ -842,7 +1047,7 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
     const isGradeA = activeEval ? finalScore >= activeEval.minScoreForA : true;
     const progGain = isGradeA ? 15 : 8;
     const nextProg = Math.min(100, stats.traineeProgress + progGain);
-    const nextGrade = computeTraineeGrade(nextProg, stats.agencyId || 'hybe');
+    const nextGrade = computeTraineeGrade(nextProg, stats.agencyId || 'hybe', stats.isDebutedIdol);
     const coinsReward = activeEval
       ? isGradeA
         ? activeEval.rewardCoins
@@ -896,10 +1101,10 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <h2 className="text-xs sm:text-sm font-bold truncate">
-                  练习生养成与生存测试中心
+                  {stats.isDebutedIdol ? '👑 K-Pop 顶流 Idol 演艺中心' : '练习生养成与生存测试中心'}
                 </h2>
                 <span className="bg-amber-300 text-[#3d1a2a] text-[9px] font-black px-1.5 py-0.2 rounded-full shrink-0">
-                  {stats.traineeGrade || 'C班练习生'}
+                  {stats.isDebutedIdol ? '👑 正式出道 Idol' : stats.traineeGrade || '未签约普通学生'}
                 </span>
               </div>
             </div>
@@ -912,70 +1117,139 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
           </button>
         </div>
 
-        {/* Compact 5 Navigation Tabs Bar (Fixed at top, single row) */}
+        {/* Dynamic Navigation Tabs Bar (Strict separation of Trainee vs Debuted Idol) */}
         <div
           className="bg-[#f4ecf0] border-b border-pink-200 px-2 py-1.5 flex items-center gap-1 overflow-x-auto overscroll-contain no-scrollbar shrink-0"
           style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
         >
-          <button
-            onClick={() => setActiveTab('survival_test')}
-            className={`py-1.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
-              activeTab === 'survival_test'
-                ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
-                : 'bg-white hover:bg-rose-50 text-rose-950 border border-pink-200'
-            }`}
-          >
-            <ShieldAlert className="w-3.5 h-3.5 text-amber-200 shrink-0" />
-            <span>月度生存测试</span>
-          </button>
+          {stats.isDebutedIdol ? (
+            /* Debuted Idol Tab Bar */
+            <>
+              <button
+                onClick={() => setActiveTab('post_debut')}
+                className={`py-1.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+                  activeTab === 'post_debut'
+                    ? 'bg-gradient-to-r from-amber-500 via-rose-500 to-fuchsia-600 text-white shadow-sm ring-2 ring-amber-300'
+                    : 'bg-amber-50/80 hover:bg-amber-100 text-amber-950 border border-amber-300'
+                }`}
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>👑 顶流Idol演艺中心</span>
+              </button>
 
-          <button
-            onClick={() => setActiveTab('survival_ai')}
-            className={`py-1.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
-              activeTab === 'survival_ai'
-                ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
-                : 'bg-white hover:bg-rose-50 text-rose-950 border border-pink-200'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-200 shrink-0" />
-            <span>AI生存秀公演</span>
-          </button>
+              <button
+                onClick={() => setActiveTab('survival_ai')}
+                className={`py-1.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+                  activeTab === 'survival_ai'
+                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
+                    : 'bg-white hover:bg-rose-50 text-rose-950 border border-pink-200'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                <span>✨ 专属Live舞台与打歌</span>
+              </button>
 
-          <button
-            onClick={() => setActiveTab('post_debut')}
-            className={`py-1.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
-              activeTab === 'post_debut'
-                ? 'bg-gradient-to-r from-amber-500 via-rose-500 to-fuchsia-600 text-white shadow-sm ring-2 ring-amber-300'
-                : 'bg-amber-50/80 hover:bg-amber-100 text-amber-950 border border-amber-300'
-            }`}
-          >
-            <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <span>👑 出道后生涯</span>
-          </button>
+              <button
+                onClick={() => setActiveTab('training')}
+                className={`py-1.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+                  activeTab === 'training'
+                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
+                    : 'bg-white hover:bg-rose-50 text-rose-950 border border-pink-200'
+                }`}
+              >
+                <Mic className="w-3.5 h-3.5 shrink-0" />
+                <span>🎙️ 顶级录音棚与声乐特训</span>
+              </button>
 
-          <button
-            onClick={() => setActiveTab('monthly_eval')}
-            className={`py-1.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
-              activeTab === 'monthly_eval'
-                ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
-                : 'bg-white hover:bg-rose-50 text-rose-950 border border-pink-200'
-            }`}
-          >
-            <Award className="w-3.5 h-3.5 shrink-0" />
-            <span>三阶段评测({evalHistory.length})</span>
-          </button>
+              <button
+                onClick={() => setActiveTab('monthly_eval')}
+                className={`py-1.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+                  activeTab === 'monthly_eval'
+                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
+                    : 'bg-white hover:bg-rose-50 text-rose-950 border border-pink-200'
+                }`}
+              >
+                <Award className="w-3.5 h-3.5 shrink-0" />
+                <span>📋 艺人星途档案({evalHistory.length})</span>
+              </button>
 
-          <button
-            onClick={() => setActiveTab('training')}
-            className={`py-1.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
-              activeTab === 'training'
-                ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
-                : 'bg-white hover:bg-rose-50 text-rose-950 border border-pink-200'
-            }`}
-          >
-            <Music className="w-3.5 h-3.5 shrink-0" />
-            <span>练习室 & 四大社</span>
-          </button>
+              <button
+                onClick={() => setActiveTab('survival_test')}
+                className={`py-1.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+                  activeTab === 'survival_test'
+                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
+                    : 'bg-white hover:bg-rose-50 text-rose-950 border border-pink-200'
+                }`}
+              >
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                <span>🔥 现役艺人商业考核</span>
+              </button>
+            </>
+          ) : (
+            /* Strict Trainee Progression Tab Bar */
+            <>
+              <button
+                onClick={() => setActiveTab('training')}
+                className={`py-1.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+                  activeTab === 'training'
+                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
+                    : 'bg-white hover:bg-rose-50 text-rose-950 border border-pink-200'
+                }`}
+              >
+                <Flame className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                <span>练习室 & 四大社签约</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('survival_test')}
+                className={`py-1.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+                  activeTab === 'survival_test'
+                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
+                    : 'bg-white hover:bg-rose-50 text-rose-950 border border-pink-200'
+                }`}
+              >
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                <span>月度生存测试</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('survival_ai')}
+                className={`py-1.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+                  activeTab === 'survival_ai'
+                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
+                    : 'bg-white hover:bg-rose-50 text-rose-950 border border-pink-200'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                <span>AI生存秀公演</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('monthly_eval')}
+                className={`py-1.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+                  activeTab === 'monthly_eval'
+                    ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-sm'
+                    : 'bg-white hover:bg-rose-50 text-rose-950 border border-pink-200'
+                }`}
+              >
+                <Award className="w-3.5 h-3.5 shrink-0" />
+                <span>考核档案({evalHistory.length})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('post_debut')}
+                className={`py-1.5 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0 whitespace-nowrap ${
+                  activeTab === 'post_debut'
+                    ? 'bg-gradient-to-r from-amber-600 via-rose-600 to-pink-600 text-white shadow-sm ring-2 ring-amber-300'
+                    : 'bg-stone-100 hover:bg-stone-200/80 text-stone-700 border border-stone-300'
+                }`}
+                title="企划社出道终审资格考核台：需达成全套严苛门槛方可触发终选战"
+              >
+                <Lock className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+                <span>🔒 企划社终审出道门槛</span>
+              </button>
+            </>
+          )}
         </div>
 
         {/* Main Content Area (Scrollable) */}
@@ -991,19 +1265,27 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                 <span className="text-[11px] font-black text-rose-950 shrink-0">👑 出道阶梯：</span>
                 {GRADE_LADDER.map((item, idx) => {
                   const isCurrent = stats.traineeGrade === item.grade;
-                  const isUnlocked = stats.traineeProgress >= item.minProgress;
+                  const isUnlocked =
+                    item.grade === 'S级·顶流C位出道'
+                      ? Boolean(stats.isDebutedIdol)
+                      : stats.traineeProgress >= item.minProgress;
                   return (
                     <React.Fragment key={item.grade}>
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap transition-all ${
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap transition-all flex items-center gap-1 ${
                           isCurrent
                             ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white ring-2 ring-amber-300 shadow-xs'
                             : isUnlocked
                             ? item.badge
                             : 'bg-stone-200/60 text-stone-400'
                         }`}
+                        title={item.desc}
                       >
-                        {item.grade}({item.minProgress}%)
+                        {item.grade === 'S级·顶流C位出道' && !stats.isDebutedIdol && (
+                          <Lock className="w-2.5 h-2.5 text-stone-400 shrink-0" />
+                        )}
+                        <span>{item.grade}</span>
+                        {isCurrent && <Check className="w-2.5 h-2.5 text-amber-200" />}
                       </span>
                       {idx < GRADE_LADDER.length - 1 && (
                         <span className="text-[10px] text-rose-300 font-bold">→</span>
@@ -1750,8 +2032,256 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
             </div>
           )}
 
+          {/* ==================== TAB 5: 🔒 出道考核门槛审核 (未出道状态) ==================== */}
+          {activeTab === 'post_debut' && !stats.isDebutedIdol && (
+            <div className="space-y-4">
+              {/* Debut Locked Warning Header */}
+              <div className="bg-gradient-to-r from-[#2c1227] via-[#481c3a] to-[#251020] text-white rounded-2xl p-4 sm:p-5 shadow-lg border border-pink-500/30">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full bg-stone-700 text-stone-200 text-[10px] font-bold flex items-center gap-1">
+                        <Lock className="w-3 h-3" />
+                        <span>Idol 身份强制锁定中</span>
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-rose-500/30 border border-rose-300/40 text-rose-200 text-[10px] font-black">
+                        当前身份：{stats.traineeGrade || 'C班练习生'}
+                      </span>
+                    </div>
+                    <h3 className="text-base sm:text-xl font-black mt-2 text-white flex items-center gap-2">
+                      <span>🔒 K-Pop 正式 Idol 身份锁定 · 出道终审资格判定台</span>
+                    </h3>
+                    <p className="text-xs text-pink-100/80 mt-1 leading-relaxed">
+                      偶像并非随意选择的标签，而是从数千名练习生中历经残酷筛选、突破重围斩获的唯一皇冠。未通过企划社终选出道判定前，严禁提前以 Idol 身份活动！
+                    </p>
+                  </div>
+                </div>
+
+                {/* Progression Flow Arrow */}
+                <div className="mt-4 pt-3 border-t border-white/10">
+                  <div className="text-[11px] font-bold text-amber-200 mb-2">
+                    📌 偶像单向严格进阶线：
+                  </div>
+                  <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1 text-[11px] text-white/90">
+                    <span className={`px-2 py-1 rounded-lg ${!stats.agencyId ? 'bg-amber-400 text-stone-950 font-black' : 'bg-white/15'}`}>未签约普通学生</span>
+                    <span>➜</span>
+                    <span className={`px-2 py-1 rounded-lg ${stats.agencyId && stats.traineeGrade?.includes('D班') ? 'bg-amber-400 text-stone-950 font-black' : 'bg-white/15'}`}>D班基础练习生</span>
+                    <span>➜</span>
+                    <span className={`px-2 py-1 rounded-lg ${stats.traineeGrade?.includes('C班') ? 'bg-amber-400 text-stone-950 font-black' : 'bg-white/15'}`}>C班练习生</span>
+                    <span>➜</span>
+                    <span className={`px-2 py-1 rounded-lg ${stats.traineeGrade?.includes('B班') ? 'bg-amber-400 text-stone-950 font-black' : 'bg-white/15'}`}>B班潜力股</span>
+                    <span>➜</span>
+                    <span className={`px-2 py-1 rounded-lg ${stats.traineeGrade?.includes('A班') || stats.traineeGrade?.includes('出道预备组') ? 'bg-amber-400 text-stone-950 font-black' : 'bg-white/15'}`}>A班ACE/预备组</span>
+                    <span>➜</span>
+                    <span className="px-2 py-1 rounded-lg bg-rose-500/40 text-rose-200 font-bold border border-rose-400/50">月末选秀终审战</span>
+                    <span>➜</span>
+                    <span className="px-2 py-1 rounded-lg bg-stone-800 text-stone-400 border border-stone-600">👑 S级·正式出道Idol</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 6-Item Debut Requirements Checklist */}
+              <div className="bg-white border-2 border-pink-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+                  <div>
+                    <h4 className="text-sm sm:text-base font-black text-rose-950 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-rose-600" />
+                      <span>企划社官方出道考核门槛（达成全部条件方可触发终选）</span>
+                    </h4>
+                    <p className="text-xs text-[#73634e] mt-0.5">
+                      四大社出道选拔极其严苛，缺一不可。考核通过后将全网发布新闻通告并举行出道庆典。
+                    </p>
+                  </div>
+                  <span className="text-xs font-black px-2.5 py-1 rounded-full bg-pink-100 text-pink-900">
+                    {debutEligibility.isEligible ? '🌟 资格已全部达成' : '⚠️ 尚有条件未满足'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Item 1: Agency */}
+                  <div className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${
+                    debutEligibility.hasAgency ? 'bg-emerald-50/70 border-emerald-200' : 'bg-rose-50/70 border-rose-200'
+                  }`}>
+                    <div>
+                      <div className="text-xs font-black text-stone-900 flex items-center gap-1">
+                        <span>1. 签约四大娱乐企划社</span>
+                      </div>
+                      <div className="text-[11px] text-stone-600 mt-0.5">
+                        当前：{debutEligibility.hasAgency ? debutEligibility.agencyName : '未签约（普通学生）'}
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black shrink-0 ${
+                      debutEligibility.hasAgency ? 'bg-emerald-200 text-emerald-950' : 'bg-rose-200 text-rose-950'
+                    }`}>
+                      {debutEligibility.hasAgency ? '✅ 已签约' : '❌ 未签约'}
+                    </span>
+                  </div>
+
+                  {/* Item 2: Grade Ladder */}
+                  <div className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${
+                    debutEligibility.hasGrade ? 'bg-emerald-50/70 border-emerald-200' : 'bg-rose-50/70 border-rose-200'
+                  }`}>
+                    <div>
+                      <div className="text-xs font-black text-stone-900 flex items-center gap-1">
+                        <span>2. 阶级达到 A班ACE / 预备组 (进度 ≥ 70%)</span>
+                      </div>
+                      <div className="text-[11px] text-stone-600 mt-0.5">
+                        当前：{stats.traineeGrade} (进度 {stats.traineeProgress}%)
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black shrink-0 ${
+                      debutEligibility.hasGrade ? 'bg-emerald-200 text-emerald-950' : 'bg-rose-200 text-rose-950'
+                    }`}>
+                      {debutEligibility.hasGrade ? '✅ 已达标' : '❌ 未达标'}
+                    </span>
+                  </div>
+
+                  {/* Item 3: Vocal */}
+                  <div className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${
+                    debutEligibility.hasVocal ? 'bg-emerald-50/70 border-emerald-200' : 'bg-rose-50/70 border-rose-200'
+                  }`}>
+                    <div>
+                      <div className="text-xs font-black text-stone-900 flex items-center gap-1">
+                        <span>3. 声乐能力 Vocal ≥ 60 分</span>
+                      </div>
+                      <div className="text-[11px] text-stone-600 mt-0.5">
+                        当前：{stats.vocalSkill || 0} / 60 分
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black shrink-0 ${
+                      debutEligibility.hasVocal ? 'bg-emerald-200 text-emerald-950' : 'bg-rose-200 text-rose-950'
+                    }`}>
+                      {debutEligibility.hasVocal ? '✅ 已达标' : '❌ 未达标'}
+                    </span>
+                  </div>
+
+                  {/* Item 4: Dance */}
+                  <div className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${
+                    debutEligibility.hasDance ? 'bg-emerald-50/70 border-emerald-200' : 'bg-rose-50/70 border-rose-200'
+                  }`}>
+                    <div>
+                      <div className="text-xs font-black text-stone-900 flex items-center gap-1">
+                        <span>4. 舞蹈能力 Dance ≥ 60 分</span>
+                      </div>
+                      <div className="text-[11px] text-stone-600 mt-0.5">
+                        当前：{stats.danceSkill || 0} / 60 分
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black shrink-0 ${
+                      debutEligibility.hasDance ? 'bg-emerald-200 text-emerald-950' : 'bg-rose-200 text-rose-950'
+                    }`}>
+                      {debutEligibility.hasDance ? '✅ 已达标' : '❌ 未达标'}
+                    </span>
+                  </div>
+
+                  {/* Item 5: Camera */}
+                  <div className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${
+                    debutEligibility.hasCamera ? 'bg-emerald-50/70 border-emerald-200' : 'bg-rose-50/70 border-rose-200'
+                  }`}>
+                    <div>
+                      <div className="text-xs font-black text-stone-900 flex items-center gap-1">
+                        <span>5. 镜头表情管理 Camera ≥ 50 分</span>
+                      </div>
+                      <div className="text-[11px] text-stone-600 mt-0.5">
+                        当前：{stats.cameraSkill || 0} / 50 分
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black shrink-0 ${
+                      debutEligibility.hasCamera ? 'bg-emerald-200 text-emerald-950' : 'bg-rose-200 text-rose-950'
+                    }`}>
+                      {debutEligibility.hasCamera ? '✅ 已达标' : '❌ 未达标'}
+                    </span>
+                  </div>
+
+                  {/* Item 6: Stamina */}
+                  <div className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${
+                    debutEligibility.hasStamina ? 'bg-emerald-50/70 border-emerald-200' : 'bg-rose-50/70 border-rose-200'
+                  }`}>
+                    <div>
+                      <div className="text-xs font-black text-stone-900 flex items-center gap-1">
+                        <span>6. 出道考核体力储备 ≥ 20 点</span>
+                      </div>
+                      <div className="text-[11px] text-stone-600 mt-0.5">
+                        当前：{stats.stamina} / 20 点
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black shrink-0 ${
+                      debutEligibility.hasStamina ? 'bg-emerald-200 text-emerald-950' : 'bg-rose-200 text-rose-950'
+                    }`}>
+                      {debutEligibility.hasStamina ? '✅ 体力充沛' : '❌ 体力不足'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Final Showcase Trigger Action Area */}
+                <div className="pt-2">
+                  {debutEligibility.isEligible ? (
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-amber-50 to-pink-50 border-2 border-amber-300 text-center space-y-2.5">
+                      <div className="text-sm font-black text-[#3d1828]">
+                        🌟 企划社董事会与总制作人已入座！考核准备就绪！
+                      </div>
+                      <p className="text-xs text-[#6e5340] max-w-lg mx-auto leading-relaxed">
+                        你将站在全开麦立体考核舞台上，展示声乐高音、刀群舞齐舞与绝杀 Ending 妖精直拍！通过后将正式加冕【正式出道 Idol】并举办全韩出道庆典！
+                      </p>
+                      <button
+                        onClick={handleExecuteDebutShowcase}
+                        disabled={isExecutingDebutShowcase}
+                        className="px-6 py-3 bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 hover:from-rose-700 hover:to-amber-600 text-white font-black text-sm rounded-xl shadow-lg cursor-pointer transition-all hover:scale-105 active:scale-95 inline-flex items-center gap-2"
+                      >
+                        {isExecutingDebutShowcase ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>正在进行出道终审判定与导师评卷...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4 text-amber-200" />
+                            <span>【💥 启动月末选秀出道终审实战（Final Debut Showcase）】</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-3.5 rounded-xl bg-stone-100 border border-stone-200 text-center space-y-2">
+                      <div className="text-xs font-bold text-stone-600">
+                        ⚠️ 尚未达成全部出道门槛。请前往【练习室 & 四大社】特训声乐与舞蹈，或参加【月度生存测试】提升评级！
+                      </div>
+                      <button
+                        disabled
+                        className="px-5 py-2.5 bg-stone-300 text-stone-500 font-bold text-xs rounded-xl cursor-not-allowed inline-flex items-center gap-1.5"
+                      >
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>未达成出道条件 · 严禁以 Idol 身份提前活动</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Debut Showcase Result Card (if failed or just tested) */}
+              {debutShowcaseResult && !debutShowcaseResult.passed && (
+                <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 text-rose-950 space-y-2 animate-in fade-in">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-sm text-rose-900">
+                      ⚠️ 出道终审评审结果：未达及格线（总分 {debutShowcaseResult.finalScore} / 68分）
+                    </span>
+                    <span className="text-xs bg-rose-200 text-rose-900 px-2 py-0.5 rounded font-bold">
+                      暂缓出道
+                    </span>
+                  </div>
+                  <p className="text-xs text-rose-800 leading-relaxed">
+                    {debutShowcaseResult.narrative}
+                  </p>
+                  <div className="bg-white/80 p-2.5 rounded-xl border border-rose-200 text-xs italic text-rose-900">
+                    💬 导师严厉点评：{debutShowcaseResult.mentorCritique}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ==================== TAB 5: 👑 出道后·顶流爱豆演艺生涯 (Post-Debut Idol Career Center) ==================== */}
-          {activeTab === 'post_debut' && (
+          {activeTab === 'post_debut' && stats.isDebutedIdol && (
             <div className="space-y-4">
               {/* Top Idol Status Banner */}
               <div className="bg-gradient-to-r from-[#2c1227] via-[#591c4d] to-[#3d1235] text-white rounded-2xl p-4 shadow-md border border-pink-400/40">
@@ -1759,9 +2289,7 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-[#2c1227] text-[11px] font-black">
-                        {stats.traineeProgress >= 75 || stats.traineeGrade === 'S级·顶流C位出道'
-                          ? '👑 已正式C位出道 · 五代第一女团顶流Center'
-                          : '✨ 准出道预备艺人 · 可随时开启破格闪电出道'}
+                        👑 已正式C位出道 · 五代第一女团顶流Center
                       </span>
                       <span className="text-xs text-pink-200 font-bold">{agencyDisplayName} 旗下核心艺人</span>
                     </div>
@@ -1785,35 +2313,6 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                     </div>
                   </div>
                 </div>
-
-                {stats.traineeProgress < 92 && (
-                  <div className="mt-3 pt-3 border-t border-white/15 flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs text-amber-200 font-bold">
-                      💡 想要立即解锁【S级·顶流C位出道】头衔并畅玩全部出道后回归行程？
-                    </span>
-                    <button
-                      onClick={() => {
-                        onUpdateStats({
-                          agencyId: stats.agencyId || 'hybe',
-                          traineeProgress: 100,
-                          traineeGrade: 'S级·顶流C位出道',
-                          snsFollowers: stats.snsFollowers + 25000,
-                          coins: stats.coins + 200000,
-                          vocalSkill: Math.min(100, vocal + 12),
-                          danceSkill: Math.min(100, dance + 12),
-                          rapSkill: Math.min(100, rap + 10),
-                          cameraSkill: Math.min(100, camera + 15),
-                        });
-                        onNotify(
-                          '👑 恭喜李秀妍通过社长特别Showcase破格闪电出道！正式加冕【S级·顶流C位出道】，获得出道结算金 +₩200,000，涨粉 +25,000！'
-                        );
-                      }}
-                      className="px-3.5 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 hover:to-yellow-200 text-[#2c1227] rounded-xl text-xs font-black shadow-sm cursor-pointer"
-                    >
-                      ⚡ 立即破格闪电C位出道 (+₩200,000 & S级头衔)
-                    </button>
-                  </div>
-                )}
               </div>
 
               {/* Module 1: Album Comeback Producer Workshop */}
@@ -2139,11 +2638,17 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                         <div className="text-[11px] font-bold text-rose-700 mt-1.5">{sch.rewardText}</div>
                       </div>
                       <button
+                        disabled={isAlreadyWorkedToday}
                         onClick={() => {
+                          if (isAlreadyWorkedToday) {
+                            onNotify('今日已完成兼职/代言，请推进日程到下一天！');
+                            return;
+                          }
                           if (stats.stamina < 12) {
                             onNotify('体力不足，先去休息或点外卖补充体力吧！');
                             return;
                           }
+                          if (onRecordJobDone) onRecordJobDone();
                           onUpdateStats({
                             ...sch.delta,
                             coins: stats.coins + (sch.delta.coins || 0),
@@ -2153,11 +2658,11 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                             mood: Math.min(100, stats.mood + (sch.delta.mood || 0)),
                             stamina: Math.max(0, stats.stamina + (sch.delta.stamina || -12)),
                           });
-                          onNotify(`🌟 成功完成顶流艺人行程【${sch.title}】！${sch.rewardText}！`);
+                          onNotify(`🌟 成功完成顶流艺人通告【${sch.title}】！${sch.rewardText}！`);
                         }}
-                        className="mt-2.5 w-full py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+                        className="mt-2.5 w-full py-1.5 bg-rose-600 hover:bg-rose-700 disabled:bg-gray-300 disabled:text-gray-600 text-white rounded-lg text-xs font-bold cursor-pointer"
                       >
-                        执行艺人通告日程
+                        {isAlreadyWorkedToday ? '今日已完成该兼职/代言，请推进日程到下一天' : '执行艺人通告日程'}
                       </button>
                     </div>
                   ))}
@@ -2668,6 +3173,118 @@ export const TraineeModal: React.FC<TraineeModalProps> = ({
                   </div>
                 );
               })()}
+            </div>
+          </div>
+        )}
+
+        {/* ==================== SUB-POPUP 4: 👑 K-Pop 顶流 Idol 出道专属庆典与新闻通告 ==================== */}
+        {showDebutCelebrationModal && debutShowcaseResult && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-in fade-in">
+            <div className="bg-gradient-to-b from-[#2b1025] via-[#1a0817] to-[#0f040e] border-2 border-amber-400/90 rounded-3xl max-w-2xl w-full p-5 sm:p-7 text-white shadow-2xl space-y-4 relative overflow-hidden">
+              {/* Golden Ambient Glow & Stars */}
+              <div className="absolute -top-16 -right-16 w-44 h-44 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-16 -left-16 w-44 h-44 bg-rose-500/20 rounded-full blur-3xl pointer-events-none" />
+
+              {/* Breaking News Ribbon */}
+              <div className="flex items-center justify-between border-b border-amber-400/30 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="bg-gradient-to-r from-amber-400 to-yellow-300 text-stone-950 text-[10px] font-black px-2 py-0.5 rounded shadow-sm">
+                    NAVER / THEQOO 全网爆点头条 #1
+                  </span>
+                  <span className="text-xs text-amber-200/90 font-bold">
+                    【独家官方通告】
+                  </span>
+                </div>
+                <span className="text-xs text-rose-300 font-black flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>K-POP 历史性时刻</span>
+                </span>
+              </div>
+
+              {/* Main Headline */}
+              <div className="space-y-1.5">
+                <h3 className="text-base sm:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-rose-200 to-amber-100 leading-snug">
+                  🎉【官方通告】四大娱乐企划社新一代女团核心 C 位正式揭晓——首尔女高李秀妍全票通过终审！
+                </h3>
+                <p className="text-xs text-stone-300 leading-relaxed">
+                  经过长达数百天魔鬼训练与残酷月末末位淘汰，首尔女子高中李秀妍（SOOYEON）在全开麦出道终选大考中，凭借震撼全场的稳定三段高音与绝杀 Ending 妖精直拍斩获评审团 S+ 评级，全票加冕【正式出道 Idol】！
+                </p>
+              </div>
+
+              {/* Debut Certificate Card */}
+              <div className="bg-white/10 border border-amber-400/40 rounded-2xl p-3.5 sm:p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-rose-500 flex items-center justify-center text-xl shadow-md">
+                      👑
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-amber-300">
+                        {agencyDisplayName} · 核心艺人
+                      </div>
+                      <div className="text-base font-black text-white">
+                        李秀妍 (SOOYEON) · S级顶流Center
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs font-bold text-amber-300">出道终审总分</div>
+                    <div className="text-xl font-black text-rose-300">{debutShowcaseResult.finalScore} / 100 分</div>
+                  </div>
+                </div>
+
+                {/* 3 Skill Score Chips */}
+                <div className="grid grid-cols-3 gap-2 pt-1 border-t border-white/10 text-center">
+                  <div className="bg-black/30 p-1.5 rounded-lg">
+                    <div className="text-[10px] text-pink-300">声乐 Vocal</div>
+                    <div className="text-xs font-black text-white">{debutShowcaseResult.vocalScore} 分</div>
+                  </div>
+                  <div className="bg-black/30 p-1.5 rounded-lg">
+                    <div className="text-[10px] text-indigo-300">舞蹈 Dance</div>
+                    <div className="text-xs font-black text-white">{debutShowcaseResult.danceScore} 分</div>
+                  </div>
+                  <div className="bg-black/30 p-1.5 rounded-lg">
+                    <div className="text-[10px] text-amber-300">镜头 Camera</div>
+                    <div className="text-xs font-black text-white">{debutShowcaseResult.cameraScore} 分</div>
+                  </div>
+                </div>
+
+                {/* Mentor Critique */}
+                <div className="bg-black/40 p-2.5 rounded-xl border border-amber-300/20 text-xs italic text-amber-100">
+                  💬 总制作人亲笔出道寄语：{debutShowcaseResult.mentorCritique}
+                </div>
+              </div>
+
+              {/* Unlocked Idol Perks */}
+              <div className="bg-gradient-to-r from-amber-950/60 to-rose-950/60 border border-amber-500/40 rounded-xl p-3 space-y-1.5 text-xs">
+                <div className="font-bold text-amber-200 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>正式加冕【正式出道 Idol】· 已解锁四大专属后续玩法：</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] text-stone-200 pt-1">
+                  <div>💿 录制制作新专辑（冲击 Melon 实时 1 位 PAK 破表）</div>
+                  <div>🏆 参加四大台打歌节目（争夺 1 位安可奖杯）</div>
+                  <div>💎 接洽高奢顶级时尚品牌全球代言（Dior / Chanel）</div>
+                  <div>🏟️ 举办全球巨蛋巡回演唱会（首尔高尺巨蛋世巡）</div>
+                </div>
+                <div className="pt-2 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold text-amber-300">
+                  <span>💰 获得企划社出道签约金：+300,000 ₩</span>
+                  <span>📱 全网粉丝风暴：SNS 死忠粉 +35,000</span>
+                </div>
+              </div>
+
+              {/* Enter Post-Debut Button */}
+              <button
+                onClick={() => {
+                  setShowDebutCelebrationModal(false);
+                  setActiveTab('post_debut');
+                  onNotify('👑 欢迎迈入顶级爱豆生涯！已解锁新专辑回归与打歌打榜演艺中心！');
+                }}
+                className="w-full py-3 bg-gradient-to-r from-amber-400 via-rose-500 to-fuchsia-600 hover:from-amber-500 hover:to-fuchsia-700 text-stone-950 font-black text-sm rounded-xl shadow-lg cursor-pointer transition-all hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-2"
+              >
+                <Sparkles className="w-4 h-4 text-stone-950" />
+                <span>【👑 正式开启 K-Pop 顶流爱豆生涯（前往演艺中心）】</span>
+              </button>
             </div>
           </div>
         )}

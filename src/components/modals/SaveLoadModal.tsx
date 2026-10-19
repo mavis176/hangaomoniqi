@@ -9,6 +9,7 @@ interface SaveSlotData {
   clockMinutes: number;
   stats: GameStats;
   npcs: NPCClassmate[];
+  discoveredNpcList?: NPCClassmate[];
   wardrobe: WardrobeItem[];
   memories: MemoryEntry[];
   chatHistories: Record<string, ChatMessage[]>;
@@ -20,6 +21,7 @@ interface SaveLoadModalProps {
   currentDay: number;
   clockMinutes: number;
   npcs: NPCClassmate[];
+  discoveredNpcList?: NPCClassmate[];
   wardrobe: WardrobeItem[];
   memories: MemoryEntry[];
   chatHistories: Record<string, ChatMessage[]>;
@@ -33,6 +35,7 @@ export const SaveLoadModal: React.FC<SaveLoadModalProps> = ({
   currentDay,
   clockMinutes,
   npcs,
+  discoveredNpcList,
   wardrobe,
   memories,
   chatHistories,
@@ -67,6 +70,7 @@ export const SaveLoadModal: React.FC<SaveLoadModalProps> = ({
       clockMinutes,
       stats,
       npcs,
+      discoveredNpcList: discoveredNpcList || npcs.filter((n) => n.isGenerated),
       wardrobe,
       memories,
       chatHistories,

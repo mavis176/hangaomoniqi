@@ -37,7 +37,9 @@ export type RomanticOrientation =
 export type ClubRankType = '见习部员' | '正式主力' | '王牌副社长' | '传奇社长';
 
 export type TraineeGradeType =
+  | '未签约普通学生'
   | '未签约练习生'
+  | 'D班练习生'
   | 'C班练习生'
   | 'B班潜力股'
   | 'A班ACE王牌'
@@ -84,6 +86,15 @@ export interface TraineeEvalRecord {
   mentorSummary: string;
 }
 
+export interface PlayerTrait {
+  id: string;
+  name: string;
+  icon: string;
+  desc: string;
+  effectDesc: string;
+  category: 'positive' | 'neutral' | 'special';
+}
+
 export interface GameStats {
   mood: number;            // 0 - 100 (心情)
   stamina: number;         // 0 - 100 (体力)
@@ -108,6 +119,7 @@ export interface GameStats {
   agencyId: string | null; // 签约企划社 ('hybe' | 'sm' | 'yg' | 'jyp' | null)
   traineeGrade: TraineeGradeType;
   traineeProgress: number; // 练习生综合出道进度 (0 - 100)
+  isDebutedIdol?: boolean; // 是否已成功通过选秀终审正式出道成为 Idol
   vocalSkill: number;      // 声乐 Vocal (0 - 100)
   danceSkill: number;      // 舞蹈 Dance (0 - 100)
   rapSkill: number;        // 说唱与台风 Rap (0 - 100)
@@ -115,6 +127,67 @@ export interface GameStats {
 
   darkIndex: number;       // 压力/阴霾值 (0 - 100)
   secretUnlocked: boolean; // 是否解锁隐藏真结局秘密线
+
+  // 新增：情境特质与倦怠系统
+  activeTraits?: PlayerTrait[];
+  burnoutLevel?: number;   // 0 - 100 (专注倦怠度)
+}
+
+export interface DailyScheduleSlot {
+  dayIndex: number;        // 0=Mon .. 6=Sun
+  dayName: string;         // '周一' .. '周日'
+  action: WeeklyActionItem;
+  yieldMultiplier: number; // 1.0 = 100%, 0.5 = 50%, 0.3 = 30%
+  isBurnout: boolean;
+  isEpiphany: boolean;
+  epiphanyBonusText?: string;
+}
+
+export interface InterruptEvent {
+  id: string;
+  dayIndex: number;        // 0..6
+  dayName: string;         // '周三', '周五'等
+  title: string;
+  category: 'bond' | 'trainee' | 'crisis' | 'teacher' | 'rare';
+  npcId?: string;
+  npcName?: string;
+  npcAvatar?: string;
+  story: string;
+  choiceStick: {
+    label: string;
+    resultDesc: string;
+    effect?: Partial<GameStats>;
+  };
+  choiceHandle: {
+    label: string;
+    resultDesc: string;
+    effect?: Partial<GameStats>;
+    npcFavDelta?: number;
+    unlockedTrait?: PlayerTrait;
+  };
+}
+
+export interface WeeklyExecutionSummary {
+  gradeYear: number;
+  weekInYear: number;
+  dailyLogs: {
+    dayIndex: number;
+    dayName: string;
+    actionName: string;
+    icon: string;
+    logText: string;
+    yieldPct: number;
+    staminaDelta: number;
+    darkDelta: number;
+    isBurnout: boolean;
+    isEpiphany: boolean;
+  }[];
+  interruptLogs: string[];
+  unlockedTraits: PlayerTrait[];
+  totalCoinsDelta: number;
+  totalAcademicsDelta: number;
+  totalTraineeDelta: number;
+  totalSocialDelta: number;
 }
 
 export interface ExamRecord {
@@ -145,7 +218,7 @@ export interface NPCClassmate {
   id: string;
   chineseName: string;
   koreanName: string;
-  role: '同班同学' | '社团前辈' | '补习班同学' | '学生会成员' | '运动部成员' | '转学生' | '老师或职员';
+  role: '同班同学' | '社团前辈' | '补习班同学' | '学生会成员' | '运动部成员' | '转学生' | '老师或职员' | string;
   gender: 'female' | 'male';
   orientation: '双性恋' | '同性恋' | '异性恋' | '无性恋/智性恋' | '温暖守护(无性恋)';
   relationshipStage: RelationshipStage;
@@ -164,6 +237,95 @@ export interface NPCClassmate {
   secretRevealed?: boolean;
   storyStage: number;
   memories?: string[];
+
+  // 🎭 独有人设与 AI 口风体系 (Persona Profile)
+  nicknameToPlayer?: string; // 对玩家的专属称呼（如："喂"、"秀妍"、"小秀妍"、"学妹"、"那个谁"）
+  speakingStyle?: string;    // 句式节奏与口癖（如：短句反问多、毒舌感叹句、波浪号连发、语气委婉）
+  forbiddenWords?: string[]; // 严禁使用的客服与AI感词汇（如：["请问有什么可以帮您", "我非常乐意", "好的呢", "作为人工智能"]）
+  attitudeByAffection?: {
+    low: string;  // 好感度 0~29 时的性格态度表现
+    mid: string;  // 好感度 30~69 时的性格态度表现
+    high: string; // 好感度 70+ 时的性格态度表现
+  };
+
+  // 🌟 AI 动态生成 NPC 扩展字段 (DynamicNPC)
+  isGenerated?: boolean;      // 是否为随机偶遇生成的动态 NPC
+  encounterWeek?: number;    // 初识结交周数 (例如：第3周)
+  encounterLocation?: string;// 相遇地点 (例如：弘大街头、大峙洞自习室、新沙洞练习室)
+  initialImpression?: string;// 初遇微情境或第一印象
+  personality?: string;      // 性格核心摘要
+}
+
+export type NPC = NPCClassmate;
+
+export interface DynamicNPC extends NPCClassmate {
+  isGenerated: true;
+  encounterWeek: number;
+  encounterLocation: string;
+  initialImpression: string;
+}
+
+export interface DynamicNPCEncounterChoice {
+  text: string;
+  action: 'ADD_FRIEND' | 'IGNORE';
+}
+
+export interface DynamicNPCEncounter {
+  name: string;              // 随机韩文名（带中文译名，如"崔宥真 (최유진)"）
+  chineseName?: string;
+  koreanName?: string;
+  identity: string;          // 身份设定（如：隔壁班吉他手/竞争公司C班练习生/便利店打工前辈）
+  personality: string;       // 性格核心（如：表面冷淡其实是重度猫奴/元气但容易自卑）
+  speakingStyle: string;     // 独特的口癖与称呼习惯
+  avatarSeed: string;        // 随机头像种子或预设头像分类ID
+  avatarUrl?: string;        // 渲染立绘图片 URL
+  encounterStory: string;    // 相遇时的微情境短文（50-80字，如借伞、抢最后一盒草莓牛奶、练习室撞衫）
+  encounterLocation: string; // 相遇地点
+  choices: DynamicNPCEncounterChoice[];
+}
+
+export interface DynamicNarrativeContext {
+  sceneType:
+    | 'choice_option'
+    | 'job_event'
+    | 'endorsement_event'
+    | 'exam_event'
+    | 'trainee_eval'
+    | 'campus_encounter'
+    | 'general';
+  playerName?: string;
+  stats?: GameStats;
+  actionName?: string;
+  choiceText?: string;
+  npc?: NPCClassmate;
+  agencyName?: string;
+  location?: string;
+  timeContext?: string;
+  customPrompt?: string;
+  examType?: 'midterm' | 'final' | 'mock' | 'csat';
+  examScore?: number;
+}
+
+export interface DynamicNarrativeResult {
+  title?: string;
+  narrative: string; // 50-80字沉浸式情境微描写
+  dialogue?: string; // 现场代入台词
+  mentorVerdict?: {
+    mentorName: string;
+    agencyStyle: string;
+    ratingScore: number; // 0-100
+    critique: string; // 犀利专业点评
+    advice: string; // 改进建议
+  };
+  jobEvent?: {
+    title: string;
+    encounterDesc: string; // 兼职偶遇/突发事件
+    tipGained: number; // 额外奖惩
+  };
+  choiceFollowUp?: {
+    innerFeeling: string; // 主角内心独白
+    socialImpact: string; // 周围反响
+  };
 }
 
 export interface WardrobeItem {

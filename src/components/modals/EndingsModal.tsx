@@ -126,13 +126,25 @@ export const EndingsModal: React.FC<EndingsModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <button
                     onClick={() => {
+                      if (!stats.isDebutedIdol) return;
                       onClose();
                       if (onOpenLifePath) onOpenLifePath('idol');
                     }}
-                    className="p-2.5 bg-gradient-to-r from-purple-800 to-pink-700 hover:from-purple-900 hover:to-pink-800 rounded-xl text-left text-white shadow-sm cursor-pointer"
+                    disabled={!stats.isDebutedIdol}
+                    className={`p-2.5 rounded-xl text-left text-white shadow-sm transition-all ${
+                      stats.isDebutedIdol
+                        ? 'bg-gradient-to-r from-purple-800 to-pink-700 hover:from-purple-900 hover:to-pink-800 cursor-pointer'
+                        : 'bg-stone-700/70 border border-stone-600 text-stone-400 cursor-not-allowed opacity-80'
+                    }`}
+                    title={!stats.isDebutedIdol ? '高中未出道成为Idol（已锁定）' : '开启顶流爱豆生涯'}
                   >
-                    <div className="text-xs font-bold">🎤 开启【顶流爱豆生涯】</div>
-                    <div className="text-[10px] text-purple-200 mt-0.5">发行专辑打歌1位、世界巡演、代言奢牌</div>
+                    <div className="text-xs font-bold flex items-center justify-between">
+                      <span>🎤 开启【顶流爱豆生涯】</span>
+                      {!stats.isDebutedIdol && <Lock className="w-3 h-3 text-stone-400" />}
+                    </div>
+                    <div className="text-[10px] text-purple-200 mt-0.5">
+                      {stats.isDebutedIdol ? '发行专辑打歌1位、世界巡演、代言奢牌' : '🔒 需在高中通过企划社选拔正式出道'}
+                    </div>
                   </button>
                   <button
                     onClick={() => {
@@ -191,13 +203,25 @@ export const EndingsModal: React.FC<EndingsModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <button
                     onClick={() => {
+                      if (!stats.isDebutedIdol) return;
                       onClose();
                       if (onOpenLifePath) onOpenLifePath('idol');
                     }}
-                    className="p-2.5 bg-gradient-to-r from-purple-700 to-pink-600 hover:from-purple-800 hover:to-pink-700 rounded-xl text-left text-white shadow-xs cursor-pointer flex flex-col justify-between"
+                    disabled={!stats.isDebutedIdol}
+                    className={`p-2.5 rounded-xl text-left text-white shadow-xs flex flex-col justify-between transition-all ${
+                      stats.isDebutedIdol
+                        ? 'bg-gradient-to-r from-purple-700 to-pink-600 hover:from-purple-800 hover:to-pink-700 cursor-pointer'
+                        : 'bg-stone-300 text-stone-500 cursor-not-allowed opacity-80'
+                    }`}
+                    title={!stats.isDebutedIdol ? '高中未出道成为Idol（已锁定）' : '开启顶流爱豆生涯'}
                   >
-                    <div className="text-xs font-black">🎤 K-Pop 顶流爱豆生涯</div>
-                    <div className="text-[10px] text-purple-100 mt-0.5">发行专辑打歌1位、世界巡演、代言奢牌</div>
+                    <div className="text-xs font-black flex items-center justify-between">
+                      <span>🎤 K-Pop 顶流爱豆生涯</span>
+                      {!stats.isDebutedIdol && <Lock className="w-3 h-3 text-stone-500" />}
+                    </div>
+                    <div className="text-[10px] text-purple-100 mt-0.5">
+                      {stats.isDebutedIdol ? '发行专辑打歌1位、世界巡演、代言奢牌' : '🔒 需在高中通过企划社选拔正式出道'}
+                    </div>
                   </button>
                   <button
                     onClick={() => {

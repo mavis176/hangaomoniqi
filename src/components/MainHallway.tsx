@@ -3,7 +3,6 @@ import { NPCClassmate, GameStats } from '../types';
 import {
   getWeekCalendarInfo,
   locationScenes,
-  WEEKDAYS,
 } from '../data/gameData';
 import {
   ChevronRight,
@@ -19,7 +18,6 @@ import {
 interface MainHallwayProps {
   gradeYear: number;
   weekInYear: number;
-  dayInWeek: number; // 0..6 (周一..周日)
   stats: GameStats;
   location: string;
   customBgUrl: string | null;
@@ -29,7 +27,6 @@ interface MainHallwayProps {
   totalMemoriesCount: number;
   onSelectNpc: (npc: NPCClassmate) => void;
   onOpenWeeklyScheduler: () => void;
-  onAdvanceOneDay: () => void;
   onOpenClubModal: () => void;
   onOpenTraineeModal: () => void;
   onTriggerRandomPoolEvent: () => void;
@@ -48,7 +45,6 @@ interface MainHallwayProps {
 export const MainHallway: React.FC<MainHallwayProps> = ({
   gradeYear,
   weekInYear,
-  dayInWeek,
   stats,
   location,
   customBgUrl,
@@ -58,7 +54,6 @@ export const MainHallway: React.FC<MainHallwayProps> = ({
   totalMemoriesCount,
   onSelectNpc,
   onOpenWeeklyScheduler,
-  onAdvanceOneDay,
   onOpenClubModal,
   onOpenTraineeModal,
   onTriggerRandomPoolEvent,
@@ -74,26 +69,8 @@ export const MainHallway: React.FC<MainHallwayProps> = ({
   onOpenDestinyCard,
 }) => {
   const weekInfo = getWeekCalendarInfo(gradeYear, weekInYear);
-  const weekdayLabel = WEEKDAYS[dayInWeek % 7] || '周一';
   const scene = locationScenes[location] || locationScenes['2楼走廊'];
   const bgImage = customBgUrl || scene.bgUrl;
-
-  const getStageBadgeColor = (stage: NPCClassmate['relationshipStage']) => {
-    switch (stage) {
-      case '恋人':
-        return 'bg-rose-500 text-white';
-      case '暧昧':
-        return 'bg-pink-400 text-white';
-      case '灵魂伴侣':
-        return 'bg-purple-600 text-white';
-      case '挚友':
-        return 'bg-emerald-600 text-white';
-      case '朋友':
-        return 'bg-sky-600 text-white';
-      default:
-        return 'bg-[#7d7568] text-white';
-    }
-  };
 
   return (
     <div className="relative flex-1 h-full overflow-y-auto sm:overflow-hidden touch-scroll overscroll-contain bg-[#d8d0c5] flex flex-col justify-between select-none">
@@ -146,7 +123,7 @@ export const MainHallway: React.FC<MainHallwayProps> = ({
                   <div className="font-bold text-[#9e4b4b] mb-0.5">当前学制</div>
                   高{gradeYear} · 第{weekInYear}周
                   <br />
-                  {weekInfo.month}月 · {weekdayLabel}
+                  第{weekInYear <= 18 ? '上' : '下'}学期 · {weekInfo.month}月
                 </div>
                 <div className="bg-[#f4f1ea] rounded-xs p-1 text-[8px] text-[#3a352e] leading-tight overflow-hidden">
                   <div className="font-bold text-[#3b6e8c] mb-0.5">竹林匿名墙</div>
@@ -187,7 +164,7 @@ export const MainHallway: React.FC<MainHallwayProps> = ({
             {weekInfo.seasonName}
           </span>
           <span className="font-bold text-[#f5d68e]">
-            {weekInfo.calendarYear}年{weekInfo.month}月 · 高{gradeYear}第{weekInYear}周 · {weekdayLabel}
+            {weekInfo.calendarYear}年{weekInfo.month}月 · 高{gradeYear}第{weekInYear <= 18 ? '上' : '下'}学期 · 第{weekInYear}周
           </span>
           <span aria-hidden="true">·</span>
           <button
@@ -203,7 +180,7 @@ export const MainHallway: React.FC<MainHallwayProps> = ({
             className="inline-flex items-center gap-1 text-pink-200 hover:underline font-bold cursor-pointer"
           >
             <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-300 fill-amber-300" />
-            <span>{stats.traineeGrade || 'C班练习生'}</span>
+            <span>{stats.isDebutedIdol ? '👑 正式出道 Idol' : stats.traineeGrade || '未签约普通学生'}</span>
           </button>
           <span aria-hidden="true">·</span>
           <button
@@ -217,7 +194,7 @@ export const MainHallway: React.FC<MainHallwayProps> = ({
           <button
             onClick={() => onOpenDestinyCard?.()}
             className="inline-flex items-center gap-1 text-amber-200 hover:underline font-bold cursor-pointer animate-pulse"
-            title="抽取今日命运奇遇卡，触发随机高额奖励与心动事件"
+            title="抽取本周命运奇遇卡，触发随机高额奖励与心动事件"
           >
             <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-300" />
             <span>🎲命运奇遇</span>
@@ -277,38 +254,32 @@ export const MainHallway: React.FC<MainHallwayProps> = ({
         })()}
       </div>
 
-      {/* 3. Bottom Area: Daily/Weekly Scheduler Card (Clean & Responsive for Mobile) */}
+      {/* 3. Bottom Area: Main Featured Action Deck Card (Requirement 3: Distinguish Visual Focus) */}
       <div className="relative z-10 w-full flex flex-col sm:flex-row justify-between items-end p-2 sm:p-3.5 md:p-5 gap-2.5 pointer-events-none">
-        {/* Daily & Weekly Schedule + Club/Trainee Action Card */}
-        <div className="pointer-events-auto w-full max-w-[360px] sm:w-[285px] md:w-[325px] bg-[#dfd9ce]/95 backdrop-blur-md border-2 border-[#ede8df] rounded-2xl shadow-[0_8px_28px_rgba(0,0,0,0.35)] overflow-hidden text-[#2b2620]">
-          {/* Header with 7-Day Progress Dots */}
-          <div className="bg-gradient-to-r from-[#57534b] to-[#6e695f] px-3 py-2 text-white font-bold text-xs sm:text-sm tracking-wide border-b border-[#9c9589] flex items-center justify-between">
-            <span>
-              高{gradeYear} · 第{weekInYear}周 · {weekdayLabel}
+        {/* Weekly Scheduler Core Action Deck */}
+        <div className="pointer-events-auto w-full max-w-[370px] sm:w-[320px] md:w-[350px] bg-[#3a332a]/92 backdrop-blur-xl border-2 border-[#f3eee4]/60 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.45)] overflow-hidden text-white">
+          {/* Header with Weekly Time Engine Indicator */}
+          <div className="bg-gradient-to-r from-[#2c261f] to-[#453d33] px-3 py-2 text-amber-200 font-black text-xs sm:text-sm tracking-wide border-b border-[#5e5346] flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <CalendarClock className="w-4 h-4 text-amber-300" />
+              <span>本周行动规划中心</span>
             </span>
-            <div className="flex items-center gap-1" title="本周7天进度（满7天进入下一周）">
-              {[0, 1, 2, 3, 4, 5, 6].map((d) => (
-                <span
-                  key={d}
-                  className={`w-2 h-2 rounded-full ${
-                    d <= dayInWeek ? 'bg-[#f5d68e]' : 'bg-white/25'
-                  }`}
-                />
-              ))}
-            </div>
+            <span className="text-[10px] font-bold bg-amber-400/20 text-amber-200 border border-amber-300/30 px-2 py-0.5 rounded-full">
+              高{gradeYear} 第{weekInYear}周
+            </span>
           </div>
 
           {/* Location Switcher & Map Button Row */}
-          <div className="w-full px-3 py-1.5 flex items-center justify-between border-b border-[#c7c0b3] bg-white/40">
+          <div className="w-full px-3 py-1.5 flex items-center justify-between border-b border-white/10 bg-black/20">
             <button
               onClick={onOpenMap || onCycleLocation}
-              className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer text-left min-w-0"
+              className="flex items-center gap-2 hover:opacity-90 transition-opacity cursor-pointer text-left min-w-0"
               title="点击打开地图页面 (12大地点·专属互动行动)"
             >
-              <span className="px-1.5 py-0.5 rounded bg-[#6b665c] border border-[#8c867b] text-white text-[10px] font-bold shadow-xs shrink-0">
+              <span className="px-2 py-0.5 rounded bg-amber-400/20 border border-amber-300/40 text-amber-200 text-[10px] font-black shrink-0">
                 {scene.floorBadge}
               </span>
-              <span className="font-bold text-xs sm:text-sm text-[#2b2620] truncate">
+              <span className="font-black text-xs sm:text-sm text-white truncate">
                 {location}
               </span>
             </button>
@@ -317,7 +288,7 @@ export const MainHallway: React.FC<MainHallwayProps> = ({
               {onOpenMap && (
                 <button
                   onClick={onOpenMap}
-                  className="px-2 py-0.5 rounded-md bg-[#e6dbcc] hover:bg-[#d8ccbc] text-[10px] font-black text-[#47392c] border border-[#cfc3b0] flex items-center gap-1 cursor-pointer shadow-2xs transition-all active:scale-95"
+                  className="px-2.5 py-1 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 text-[11px] font-black text-amber-200 border border-amber-300/40 flex items-center gap-1 cursor-pointer shadow-xs transition-all active:scale-95"
                   title="打开首尔女高完整漫游地图"
                 >
                   <span>🗺️</span>
@@ -326,7 +297,7 @@ export const MainHallway: React.FC<MainHallwayProps> = ({
               )}
               <button
                 onClick={onCycleLocation}
-                className="p-1 text-[#5a544a] hover:text-[#2b2620] cursor-pointer"
+                className="p-1 text-stone-300 hover:text-white cursor-pointer"
                 title="快速切换场景"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -334,81 +305,81 @@ export const MainHallway: React.FC<MainHallwayProps> = ({
             </div>
           </div>
 
-          {/* Milestone Exam or Daily Schedule Info */}
-          <div className="px-3 py-1.5 flex items-start gap-2 border-b border-[#c7c0b3]/70 bg-[#e8e2d6]/60">
-            <span className="w-4 h-4 rounded bg-[#759e7c] text-white flex items-center justify-center shrink-0 mt-0.5">
-              <Check className="w-3 h-3 stroke-[3]" />
+          {/* Milestone Exam or Weekly Schedule Status Info */}
+          <div className="px-3 py-1.5 flex items-start gap-2 border-b border-white/10 bg-black/30">
+            <span className="w-4 h-4 rounded bg-amber-500/80 text-white flex items-center justify-center shrink-0 mt-0.5">
+              <Sparkles className="w-3 h-3 stroke-[3]" />
             </span>
             <div className="text-[11px] sm:text-xs leading-snug min-w-0">
-              <div className="text-[#2b2620] font-bold truncate">
+              <div className="text-stone-100 font-bold truncate">
                 {weekInfo.milestoneExam
-                  ? `🔥 本周大考: ${weekInfo.milestoneExam.title}`
-                  : dayInWeek < 5
-                  ? `📚 ${weekdayLabel}校内授课 + 放学社团/练习室`
-                  : `🌸 ${weekdayLabel}周末自由支配 · 比赛/选秀/约会`}
+                  ? `🔥 本周重大考核: ${weekInfo.milestoneExam.title}`
+                  : `📅 高${gradeYear}第${weekInYear}周 · 排布7日行动决策并按周推进`}
               </div>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="p-2 space-y-1.5">
-            {/* Primary Button: Advance 1 Day (Slow, rich daily progression!) */}
+          {/* Core Main Action Buttons */}
+          <div className="p-2.5 space-y-2">
+            {/* Primary Hero Button: Open Weekly Scheduler Engine */}
             <button
-              onClick={onAdvanceOneDay}
-              className="w-full bg-gradient-to-r from-[#5c7a67] to-[#466351] hover:from-[#688a75] hover:to-[#52735e] active:scale-[0.98] text-white rounded-xl p-2 flex items-center justify-between shadow-md transition-all cursor-pointer"
+              onClick={onOpenWeeklyScheduler}
+              className="w-full bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 hover:from-amber-500 hover:to-orange-500 active:scale-[0.98] text-white rounded-xl p-2.5 sm:p-3 flex items-center justify-between shadow-xl border-2 border-amber-300/60 transition-all cursor-pointer group"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <Sun className="w-4 h-4 text-[#f5d68e] shrink-0" />
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0 border border-white/30 shadow-xs">
+                  <CalendarClock className="w-4 h-4 sm:w-5 sm:h-5 text-amber-200 animate-pulse" />
+                </div>
                 <div className="text-left leading-tight truncate">
-                  <div className="text-xs sm:text-[13px] font-bold">
-                    推进今日校园日常 ({weekdayLabel} → {WEEKDAYS[(dayInWeek + 1) % 7]})
+                  <div className="text-xs sm:text-sm font-black text-white">
+                    开启本周行动排程（第{weekInYear}周）
                   </div>
-                  <div className="text-[10px] text-[#dcebe1]">
-                    按天慢节奏体验 · 触发日常奇遇
+                  <div className="text-[10px] text-amber-100/90 font-medium truncate">
+                    排布7日决策 · 连续演播推进至第{weekInYear + 1}周
                   </div>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 shrink-0" />
+              <ChevronRight className="w-4 h-4 shrink-0 text-amber-200 group-hover:translate-x-0.5 transition-transform" />
             </button>
 
-            {/* Dedicated Club Competition & Trainee Center Popup Buttons */}
-            <div className="grid grid-cols-2 gap-1.5">
+            {/* Featured Hero Actions: Club Competition & Trainee Showcase */}
+            <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={onOpenClubModal}
-                className="py-1.5 px-2 bg-gradient-to-r from-[#4b5e4d] to-[#3c4d3e] hover:from-[#576e5a] hover:to-[#475b49] active:scale-[0.98] text-white rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 shadow-xs cursor-pointer"
+                className="py-2 px-2.5 bg-gradient-to-r from-[#2c4232] to-[#1f3024] hover:from-[#37523f] hover:to-[#273d2d] active:scale-[0.98] border border-emerald-400/40 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
                 title="打开社团专属弹窗：部室突发事件 + 三阶段互动比赛"
               >
-                <Trophy className="w-3.5 h-3.5 text-[#f5d68e] shrink-0" />
+                <Trophy className="w-4 h-4 text-amber-300 shrink-0" />
                 <span className="truncate">社团与比赛</span>
               </button>
 
               <button
                 onClick={onOpenTraineeModal}
-                className="py-1.5 px-2 bg-gradient-to-r from-[#9e426c] to-[#7d3154] hover:from-[#b04b79] hover:to-[#8f3961] active:scale-[0.98] text-white rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 shadow-xs cursor-pointer"
+                className="py-2 px-2.5 bg-gradient-to-r from-[#8c2d58] to-[#691f41] hover:from-[#9e3565] hover:to-[#7a254c] active:scale-[0.98] border border-pink-400/40 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
                 title="打开练习生企划弹窗：地下练习室突发事件 + 月末评价选秀"
               >
-                <Star className="w-3.5 h-3.5 text-amber-200 fill-amber-200 shrink-0" />
+                <Star className="w-4 h-4 text-amber-300 fill-amber-300 shrink-0" />
                 <span className="truncate">练习生选秀</span>
               </button>
             </div>
 
-            {/* Bottom Row: Weekly Scheduler + Trigger Random Story Event */}
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                onClick={onOpenWeeklyScheduler}
-                className="py-1.5 px-2 bg-[#d2cbc0] hover:bg-[#c6beb1] active:scale-[0.98] border border-[#b8b0a2] rounded-lg text-[#2b2620] text-[11px] font-bold flex items-center justify-center gap-1 shadow-xs cursor-pointer"
-              >
-                <CalendarClock className="w-3.5 h-3.5 text-[#5c4828] shrink-0" />
-                <span className="truncate">周行动排程</span>
-              </button>
-
+            {/* Bottom Row: Trigger Story Event + Seoul Map Exploration */}
+            <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={onTriggerRandomPoolEvent}
                 disabled={isGeneratingAIEvent}
-                className="py-1.5 px-2 bg-gradient-to-r from-[#8c7a5b] to-[#6e5f45] hover:from-[#9c8968] hover:to-[#7d6c50] disabled:opacity-60 text-[#fdfbf7] rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 shadow-xs cursor-pointer"
+                className="py-1.5 px-2 bg-gradient-to-r from-[#705e45] to-[#544633] hover:from-[#826f53] hover:to-[#63533d] disabled:opacity-60 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer border border-amber-300/30"
               >
-                <Sparkles className={`w-3.5 h-3.5 text-[#f5d68e] shrink-0 ${isGeneratingAIEvent ? 'animate-spin' : ''}`} />
+                <Sparkles className={`w-3.5 h-3.5 text-amber-300 shrink-0 ${isGeneratingAIEvent ? 'animate-spin' : ''}`} />
                 <span className="truncate">{isGeneratingAIEvent ? '推演中...' : '触发剧情'}</span>
+              </button>
+
+              <button
+                onClick={onOpenMap || onCycleLocation}
+                className="py-1.5 px-2 bg-stone-800/80 hover:bg-stone-700/80 active:scale-[0.98] border border-stone-600/80 rounded-xl text-amber-100 text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                <span>🗺️</span>
+                <span className="truncate">首尔全景地图</span>
               </button>
             </div>
           </div>

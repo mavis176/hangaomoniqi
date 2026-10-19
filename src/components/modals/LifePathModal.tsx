@@ -24,6 +24,7 @@ import {
   BookOpen,
   Wine,
   Plane,
+  Lock,
 } from 'lucide-react';
 import {
   GameStats,
@@ -40,6 +41,7 @@ import {
   UNIVERSITY_CAREER_TRACKS,
   POTENTIAL_SPOUSE_OPTIONS,
 } from '../../data/lifePathData';
+import { generateLifePathStory } from '../../services/aiService';
 
 interface LifePathModalProps {
   onClose: () => void;
@@ -141,17 +143,12 @@ export const LifePathModal: React.FC<LifePathModalProps> = ({
     setIsGeneratingStory(true);
     setCurrentAiStory(null);
     try {
-      const res = await fetch('/api/ai/lifepath-story', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pathType,
-          actionTitle,
-          contextInfo,
-          protagonistName: '李秀妍',
-        }),
+      const data = await generateLifePathStory({
+        pathType,
+        actionTitle,
+        contextInfo,
+        protagonistName: '李秀妍',
       });
-      const data = await res.json();
       if (data && data.story) {
         setCurrentAiStory({
           title: data.title || `【${actionTitle}】后续新发展`,
@@ -526,15 +523,28 @@ export const LifePathModal: React.FC<LifePathModalProps> = ({
               <span>人生十字路口 (总览)</span>
             </button>
             <button
-              onClick={() => setSelectedTab('idol')}
+              onClick={() => {
+                if (!stats.isDebutedIdol) {
+                  onNotify('⚠️ 偶像身份强制锁定！你在高中阶段尚未通过企划社终审正式出道，无法提前进入爱豆篇章！');
+                  return;
+                }
+                setSelectedTab('idol');
+              }}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                selectedTab === 'idol'
+                !stats.isDebutedIdol
+                  ? 'bg-stone-100 text-stone-500 border border-stone-300 hover:bg-stone-200 cursor-not-allowed opacity-80'
+                  : selectedTab === 'idol'
                   ? 'bg-gradient-to-r from-purple-700 to-pink-600 text-white shadow-md'
                   : 'bg-white/70 hover:bg-white text-purple-900 border border-purple-200'
               }`}
+              title={!stats.isDebutedIdol ? '需在高中期间作为练习生通过终审正式出道方可解锁' : '进入顶流爱豆篇'}
             >
-              <Music className="w-3.5 h-3.5 text-pink-400" />
-              <span>🌟 K-Pop 顶流爱豆生涯</span>
+              {!stats.isDebutedIdol ? (
+                <Lock className="w-3.5 h-3.5 text-stone-500" />
+              ) : (
+                <Music className="w-3.5 h-3.5 text-pink-400" />
+              )}
+              <span>{stats.isDebutedIdol ? '🌟 K-Pop 顶流爱豆生涯' : '🔒 爱豆篇 (需高中出道)'}</span>
             </button>
             <button
               onClick={() => setSelectedTab('university')}
@@ -630,10 +640,25 @@ export const LifePathModal: React.FC<LifePathModalProps> = ({
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                   {/* Card 1: Idol */}
-                  <div className="bg-gradient-to-br from-purple-50 via-pink-50 to-white border-2 border-purple-200 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md transition-all">
+                  <div className={`rounded-2xl p-4 flex flex-col justify-between transition-all ${
+                    stats.isDebutedIdol
+                      ? 'bg-gradient-to-br from-purple-50 via-pink-50 to-white border-2 border-purple-200 hover:shadow-md'
+                      : 'bg-stone-50 border-2 border-stone-300 opacity-90'
+                  }`}>
                     <div className="space-y-2">
-                      <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center text-lg font-bold shadow-sm">
-                        🎤
+                      <div className="flex items-center justify-between">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold shadow-sm ${
+                          stats.isDebutedIdol ? 'bg-purple-600 text-white' : 'bg-stone-400 text-stone-100'
+                        }`}>
+                          🎤
+                        </div>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                          stats.isDebutedIdol
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-stone-200 text-stone-700 flex items-center gap-1'
+                        }`}>
+                          {stats.isDebutedIdol ? '✅ 高中已出道' : <><Lock className="w-2.5 h-2.5" /> 需高中选秀出道</>}
+                        </span>
                       </div>
                       <h4 className="text-base font-black text-purple-950">
                         K-Pop 顶流爱豆生涯
@@ -641,17 +666,35 @@ export const LifePathModal: React.FC<LifePathModalProps> = ({
                       <p className="text-xs text-purple-800 leading-relaxed">
                         签约顶级企划社C位出道！发行回归专辑争夺打歌节目1位、举办全球巨蛋巡演、签约奢牌全球代言，体验最炙手可热的超级偶像人生。
                       </p>
-                      <div className="text-[11px] text-purple-600 font-bold">
-                        当前粉丝：{(idolState.fansCount / 10000).toFixed(1)}万 · 发行专辑：{idolState.albums.length}张
-                      </div>
+                      {stats.isDebutedIdol ? (
+                        <div className="text-[11px] text-purple-600 font-bold">
+                          当前粉丝：{(idolState.fansCount / 10000).toFixed(1)}万 · 发行专辑：{idolState.albums.length}张
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-stone-600 bg-stone-200/70 p-2 rounded-xl font-bold flex items-center gap-1.5">
+                          <Lock className="w-3.5 h-3.5 text-stone-600 shrink-0" />
+                          <span>未达成出道判定：须在高中练习生考核中升入A班并成功通过终审选拔战方可解锁！</span>
+                        </div>
+                      )}
                     </div>
-                    <button
-                      onClick={() => setSelectedTab('idol')}
-                      className="mt-4 w-full py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-                    >
-                      <span>进入顶流爱豆篇</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
+                    {stats.isDebutedIdol ? (
+                      <button
+                        onClick={() => setSelectedTab('idol')}
+                        className="mt-4 w-full py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                      >
+                        <span>进入顶流爱豆篇</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    ) : (
+                      <button
+                        disabled
+                        onClick={() => onNotify('⚠️ 偶像身份强制锁定！你在高中阶段尚未通过企划社出道终审。请在高中生涯中达成 A 班并通过出道选秀大考！')}
+                        className="mt-4 w-full py-2 bg-stone-200 text-stone-500 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-not-allowed border border-stone-300"
+                      >
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>未出道 · 严禁自选爱豆生涯</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* Card 2: University & Career */}

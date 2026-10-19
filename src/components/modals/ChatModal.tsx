@@ -11,9 +11,14 @@ import {
   Smile,
   Flame,
   MessageCircle,
+  FileText,
 } from 'lucide-react';
 import { NPCClassmate, GameStats, AIConfig, ChatMessage } from '../../types';
-import { generateNpcChatReply } from '../../services/aiService';
+import {
+  generateNpcChatReply,
+  generateNpcMemorySummary,
+  NpcMemorySummaryResult,
+} from '../../services/aiService';
 
 interface ChatModalProps {
   npc: NPCClassmate;
@@ -56,6 +61,8 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [showMemoryDrawer, setShowMemoryDrawer] = useState(false);
   const [showMindReading, setShowMindReading] = useState(false);
+  const [summaryBriefing, setSummaryBriefing] = useState<NpcMemorySummaryResult | null>(null);
+  const [showSummaryCard, setShowSummaryCard] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'keywords' | 'memories'>('keywords');
   const [customMemoryInput, setCustomMemoryInput] = useState('');
   const [customKeywordInput, setCustomKeywordInput] = useState('');
@@ -88,6 +95,13 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   );
 
   const [suggestedTopics, setSuggestedTopics] = useState<string[]>(() => {
+    if (npc.isGenerated) {
+      return [
+        `上次在${npc.encounterLocation || '首尔街头'}相遇之后，你最近忙什么呢？`,
+        `听说你是【${npc.role}】，平时有什么特别的日常趣事吗？`,
+        `周末如果有空的话，要不要一起去圣水洞喝杯咖啡？`,
+      ];
+    }
     if (npc.id === 'npc_3') {
       return [
         '刚才那道压轴数学题，你做完了吗？',
@@ -134,7 +148,11 @@ export const ChatModal: React.FC<ChatModalProps> = ({
       let actionDesc = `${npc.chineseName}转过头来，眼神亮晶晶地注视着你`;
       let innerThought = `看到秀妍走过来，整个人都轻松了不少。`;
 
-      if (npc.id === 'npc_3') {
+      if (npc.isGenerated) {
+        greetingText = `秀妍！真巧啊，刚才还在想上次在${npc.encounterLocation || '首尔街头'}偶遇你的事呢。今天过得怎么样？`;
+        actionDesc = `${npc.chineseName}带着【${npc.role}】特有的神采看向你，语气自然流露出“${npc.speakingStyle || '亲切随和'}”的风格`;
+        innerThought = `没想到这么快就能和秀妍在KakaoTalk上聊起来，上次交换联系方式太明智了。`;
+      } else if (npc.id === 'npc_3') {
         greetingText =
           stage === '恋人' || stage === '灵魂伴侣'
             ? `秀妍，你在${location}发什么呆呢？……冷不冷？过来，我这罐热咖啡分你捂捂手。`
@@ -173,9 +191,56 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory, isLoading]);
 
+  const handleExecuteSummaryCommand = async (rawCommandText = '/summary') => {
+    if (isLoading) return;
+    const userCmdMsg: ChatMessage = {
+      sender: 'user',
+      text: rawCommandText,
+      timeLabel: clockStr,
+    };
+    const updatedHistory = [...chatHistory, userCmdMsg];
+    onUpdateChatHistory(npc.id, updatedHistory);
+    setInputText('');
+    setIsLoading(true);
+
+    try {
+      const summaryRes = await generateNpcMemorySummary({
+        aiConfig,
+        npc,
+        memories,
+        timeContext,
+      });
+
+      setSummaryBriefing(summaryRes);
+      setShowSummaryCard(true);
+
+      const briefingReplyMsg: ChatMessage = {
+        sender: 'npc',
+        timeLabel: clockStr,
+        actionDesc: `📋 【简报 AI · ${summaryRes.impressionTitle || `${npc.chineseName}的羁绊总结`}】`,
+        text: summaryRes.summary,
+        innerThought: summaryRes.bondEvaluation || `基于 ${memories.length} 条共同记忆生成`,
+        extractedKeywords: ['简报AI总结'],
+      };
+
+      onUpdateChatHistory(npc.id, [...updatedHistory, briefingReplyMsg]);
+      onNotify(`📋 【简报 AI】已基于 memories 生成 ${npc.chineseName} 的100字看法与共同经历总结！`);
+    } catch (_e) {
+      onNotify('生成简报总结失败，请稍后重试');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSendMessage = async (textToSend: string) => {
     const trimmed = textToSend.trim();
     if (!trimmed || isLoading) return;
+
+    // Intercept /summary command for Briefing AI
+    if (trimmed.toLowerCase() === '/summary' || trimmed.toLowerCase().startsWith('/summary ')) {
+      await handleExecuteSummaryCommand(trimmed);
+      return;
+    }
 
     const userMsg: ChatMessage = {
       sender: 'user',
@@ -363,6 +428,21 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
+                disabled={isLoading}
+                onClick={() => handleExecuteSummaryCommand('/summary')}
+                className={`px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 border transition-all cursor-pointer ${
+                  showSummaryCard
+                    ? 'bg-amber-400 text-[#2b2212] border-white shadow-xs'
+                    : 'bg-[#5c4f38]/90 hover:bg-[#6e5e42] text-amber-200 border-amber-300/40'
+                }`}
+                title="触发 /summary 指令：基于 memories 生成 100 字看法与共同经历总结"
+              >
+                <FileText className="w-3 h-3" />
+                <span className="hidden sm:inline">简报AI</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setShowMindReading(!showMindReading)}
                 className={`px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 border transition-all cursor-pointer ${
                   showMindReading
@@ -395,6 +475,32 @@ export const ChatModal: React.FC<ChatModalProps> = ({
               </button>
             </div>
           </div>
+
+          {showSummaryCard && summaryBriefing && (
+            <div className="mt-2.5 bg-gradient-to-r from-[#3d3122]/95 via-[#4f3f2b]/95 to-[#382c1e]/95 border border-amber-300/60 rounded-xl p-3 text-amber-50 text-xs leading-relaxed shadow-lg animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="flex items-center justify-between font-bold text-amber-300 text-[11px] mb-1">
+                <span className="flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-amber-300" />
+                  <span>📋 【简报 AI】{summaryBriefing.impressionTitle}</span>
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] bg-amber-400/20 px-2 py-0.5 rounded-full text-amber-200">
+                    {summaryBriefing.bondEvaluation}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowSummaryCard(false)}
+                    className="text-amber-200/80 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+              <p className="text-amber-50/95 bg-black/25 p-2.5 rounded-lg border border-amber-400/25">
+                {summaryBriefing.summary}
+              </p>
+            </div>
+          )}
 
           {showMindReading && (
             <div className="mt-2.5 bg-gradient-to-r from-rose-950/90 via-purple-950/90 to-indigo-950/90 border border-pink-400/50 rounded-xl p-3 text-pink-100 text-xs leading-relaxed shadow-lg animate-in fade-in slide-in-from-top-1 duration-200">
@@ -675,8 +781,18 @@ export const ChatModal: React.FC<ChatModalProps> = ({
           <div className="text-[11px] text-[#554d42] font-bold flex items-center justify-between">
             <span className="flex items-center gap-1">
               <MessageCircle className="w-3 h-3 text-[#786950]" />
-              连续交谈话题（点击直接说，时间 +10分钟）：
+              连续交谈话题（点击直接说，或使用 /summary 指令生成简报）：
             </span>
+            <button
+              type="button"
+              disabled={isLoading}
+              onClick={() => handleSendMessage('/summary')}
+              className="text-[10px] bg-amber-100 hover:bg-amber-200 border border-amber-400 text-amber-950 font-black px-2 py-0.5 rounded-md cursor-pointer flex items-center gap-1 shadow-2xs"
+              title="发送 /summary 指令，让简报 AI 生成100字看法与共同回忆总结"
+            >
+              <FileText className="w-2.5 h-2.5 text-amber-700" />
+              <span>/summary 简报AI</span>
+            </button>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {suggestedTopics.map((topic, i) => (
@@ -704,7 +820,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder={`对 ${npc.chineseName} 自由输入（根据MBTI、爱好与好感度动态回应）...`}
+            placeholder={`对 ${npc.chineseName} 自由输入，或输入 /summary 召唤【简报 AI】生成100字总结...`}
             className="flex-1 bg-[#f9f7f2] border border-[#bbb1a0] rounded-xl px-3.5 py-2 text-xs sm:text-sm text-[#2b2620] placeholder-[#877c6b] focus:outline-none focus:border-[#7d643d] shadow-inner"
           />
           <button
